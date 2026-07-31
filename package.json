@@ -1,0 +1,60 @@
+{
+  "name": "electron-react-app",
+  "version": "1.0.0",
+  "description": "Electron + React + Less + Antd + Zustand application",
+  "main": "out/main/main.js",
+  "scripts": {
+    "dev": "node scripts/electron-vite.mjs dev",
+    "start": "node scripts/electron-vite.mjs preview",
+    "typecheck": "tsc --noEmit",
+    "build": "electron-vite build",
+    "build:electron": "npm run build && electron-builder"
+  },
+  "keywords": [
+    "electron",
+    "react",
+    "antd",
+    "zustand"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "antd": "^5.15.3",
+    "pixi.js": "^8.19.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^29.1.4",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "less": "^4.2.0",
+    "typescript": "^6.0.3",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.example.electron-react-app",
+    "productName": "Electron React App",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

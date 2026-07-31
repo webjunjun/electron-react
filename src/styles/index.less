@@ -1,0 +1,284 @@
+// ── Dark theme palette ────────────────────────────────────────────────
+@bg-app: #1e1e1e; // app background
+@bg-panel: #252526; // toolbars / side panels
+@bg-elevated: #2d2d30; // cards / hover surfaces
+@bg-canvas: #141414; // editing canvas backdrop
+@border-color: #3c3c3c;
+@text-color: rgba(255, 255, 255, 0.85);
+@text-secondary: rgba(255, 255, 255, 0.45);
+@primary-color: #177ddc;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  background: @bg-app;
+  color: @text-color;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  // Desktop-app feel: disable text selection / native drag by default.
+  user-select: none;
+}
+
+.app {
+  height: 100vh;
+  overflow: hidden;
+  background: @bg-app;
+}
+
+// ── Home / launcher ───────────────────────────────────────────────────
+.page-container {
+  height: 100vh;
+  padding: 48px;
+  overflow: auto;
+  background: radial-gradient(circle at 30% 0%, #2a2a2e 0%, @bg-app 60%);
+}
+
+// ── Desktop editor shell ──────────────────────────────────────────────
+.editor-page {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 56px 1fr 280px;
+  grid-template-areas:
+    'toolbar toolbar toolbar'
+    'rail    canvas  panel'
+    'status  status  status';
+  height: 100vh;
+  background: @bg-app;
+  color: @text-color;
+
+  // Variant with a full-width bottom timeline (video editor).
+  &.has-timeline {
+    grid-template-rows: auto 1fr 200px auto;
+    grid-template-areas:
+      'toolbar  toolbar  toolbar'
+      'rail     canvas   panel'
+      'timeline timeline timeline'
+      'status   status   status';
+  }
+}
+
+.editor-toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 12px;
+  background: @bg-panel;
+  border-bottom: 1px solid @border-color;
+}
+
+.editor-toolbar__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.editor-toolbar__spacer {
+  flex: 1;
+}
+
+.editor-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: @bg-panel;
+  border-right: 1px solid @border-color;
+}
+
+.editor-rail__tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  font-size: 18px;
+  color: @text-secondary;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: @bg-elevated;
+    color: @text-color;
+  }
+
+  &.is-active {
+    background: fade(@primary-color, 20%);
+    color: @primary-color;
+  }
+}
+
+.editor-canvas {
+  grid-area: canvas;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: @bg-canvas;
+  // 下面这种写法是行业惯例实现的半透明棋盘背景布局
+  background-image:
+    linear-gradient(45deg, #1a1a1a 25%, transparent 25%),
+    linear-gradient(-45deg, #1a1a1a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #1a1a1a 75%),
+    linear-gradient(-45deg, transparent 75%, #1a1a1a 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+.editor-canvas__placeholder {
+  text-align: center;
+  color: @text-secondary;
+}
+
+// ── Image canvas (PixiJS) ─────────────────────────────────────────────
+.image-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.image-canvas__stage {
+  width: 100%;
+  height: 100%;
+
+  canvas {
+    display: block;
+  }
+}
+
+.image-canvas__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: @text-secondary;
+  cursor: pointer;
+  transition: color 0.15s;
+
+  &:hover {
+    color: @text-color;
+  }
+}
+
+.editor-panel {
+  grid-area: panel;
+  padding: 16px;
+  overflow: auto;
+  background: @bg-panel;
+  border-left: 1px solid @border-color;
+}
+
+.editor-panel__section-title {
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: @text-secondary;
+}
+
+.editor-status {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 24px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: @text-secondary;
+  background: @primary-color;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.editor-status__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+// ── Video timeline ────────────────────────────────────────────────────
+.editor-timeline {
+  grid-area: timeline;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  overflow: hidden;
+  background: @bg-panel;
+  border-top: 1px solid @border-color;
+}
+
+.editor-timeline__ruler {
+  display: flex;
+  height: 20px;
+  border-bottom: 1px solid @border-color;
+  color: @text-secondary;
+  font-size: 11px;
+}
+
+.editor-timeline__tick {
+  flex: 1;
+  padding-left: 4px;
+  border-left: 1px solid @border-color;
+}
+
+.editor-timeline__tracks {
+  flex: 1;
+  overflow-y: auto;
+  padding-top: 8px;
+}
+
+.editor-timeline__track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  margin-bottom: 6px;
+}
+
+.editor-timeline__track-label {
+  width: 60px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: @text-secondary;
+}
+
+.editor-timeline__clip {
+  height: 36px;
+  border-radius: 4px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #fff;
+  background: linear-gradient(180deg, #2b6cb0 0%, #1f4e7a 100%);
+  border: 1px solid fade(@primary-color, 60%);
+  cursor: pointer;
+}
+
+.editor-timeline__clip--audio {
+  background: linear-gradient(180deg, #2f855a 0%, #22543d 100%);
+  border-color: fade(#38a169, 60%);
+}
