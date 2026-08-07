@@ -5,8 +5,8 @@ export interface ImageSize {
   height: number;
 }
 
-/** 标注类型，后续可扩展 'brush' | 'rect' 等。 */
-export type AnnotationType = 'text';
+/** 标注类型，后续可扩展 'rect' 等。 */
+export type AnnotationType = 'text' | 'brush';
 
 interface BaseAnnotation {
   id: string;
@@ -25,8 +25,37 @@ export interface TextAnnotation extends BaseAnnotation {
   fontFamily?: string;
 }
 
+/** world 局部坐标点。 */
+export interface BrushPoint {
+  x: number;
+  y: number;
+}
+
+export interface BrushAnnotation extends BaseAnnotation {
+  type: 'brush';
+  /** 笔迹路径点（相对 x/y 的偏移，world 单位）。 */
+  points: BrushPoint[];
+  /** 线宽，以 world 单位计（随缩放放大）。 */
+  size: number;
+  color: string;
+}
+
 /** 所有标注对象的联合类型。 */
-export type Annotation = TextAnnotation;
+export type Annotation = TextAnnotation | BrushAnnotation;
+
+/** 调色参数，取值范围 -100 ~ 100，0 表示无调整。 */
+export interface Adjustments {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+}
+
+/** 调色参数的初始（无调整）值。 */
+export const DEFAULT_ADJUSTMENTS: Adjustments = {
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+};
 
 interface ImageEditorState {
   /** 当前加载的图片在磁盘上的路径。 */
@@ -43,6 +72,9 @@ interface ImageEditorState {
   /** 当前选中的标注 id。 */
   selectedId: string | null;
 
+  /** 图片调色参数（作用于图片本身，不影响标注）。 */
+  adjustments: Adjustments;
+
   /** 加载新的图片，撤销之前的 ObjectURL 来避免内存泄漏。 */
   setImage: (diskSrc: string, blobUrl: string, size: ImageSize) => void;
   /** 更新显示的缩放比例（由画布调用）。 */
@@ -58,6 +90,11 @@ interface ImageEditorState {
   removeAnnotation: (id: string) => void;
   /** 设置当前选中的标注（传 null 取消选中）。 */
   selectAnnotation: (id: string | null) => void;
+
+  /** 局部更新调色参数。 */
+  setAdjustment: (patch: Partial<Adjustments>) => void;
+  /** 调色参数归零。 */
+  resetAdjustments: () => void;
 }
 
 export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
@@ -67,6 +104,7 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
   zoom: 1,
   annotations: [], // 所有标注对象
   selectedId: null, // 当前选中的标注 id
+  adjustments: { ...DEFAULT_ADJUSTMENTS }, // 图片调色参数
 
   setImage: (diskSrc, blobUrl, size) => {
     const prev = get().imageSrc;
@@ -74,13 +112,14 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
       // 先撤销之前的ObjectURL，避免内存泄漏
       URL.revokeObjectURL(prev);
     }
-    // 切换图片时清空标注
+    // 切换图片时清空标注与调色
     set({
       diskImageSrc: diskSrc,
       imageSize: size,
       imageSrc: blobUrl,
       annotations: [],
       selectedId: null,
+      adjustments: { ...DEFAULT_ADJUSTMENTS },
     });
   },
 
@@ -99,6 +138,7 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
       zoom: 1,
       annotations: [],
       selectedId: null,
+      adjustments: { ...DEFAULT_ADJUSTMENTS },
     });
   },
 
@@ -119,4 +159,9 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
     })),
 
   selectAnnotation: (id) => set({ selectedId: id }),
+
+  setAdjustment: (patch) =>
+    set((s) => ({ adjustments: { ...s.adjustments, ...patch } })),
+
+  resetAdjustments: () => set({ adjustments: { ...DEFAULT_ADJUSTMENTS } }),
 }));

@@ -22,7 +22,7 @@ import TextToolPanel, { DefaultTextStyle } from './TextToolPanel';
 import MoveToolPanel from './MoveToolPanel';
 import CropToolPanel from './CropToolPanel';
 import AdjustToolPanel from './AdjustToolPanel';
-import BrushToolPanel from './BrushToolPanel';
+import BrushToolPanel, { DefaultBrushStyle } from './BrushToolPanel';
 import MosaicToolPanel from './MosaicToolPanel';
 import FilterToolPanel from './FilterToolPanel';
 
@@ -43,14 +43,16 @@ const toolLabels: Record<string, string> = Object.fromEntries(
 function ImageEditor() {
   const { message } = App.useApp();
   const [activeTool, setActiveTool] = useState('move');
-  const [brightness, setBrightness] = useState(0);
-  const [contrast, setContrast] = useState(0);
-  const [saturation, setSaturation] = useState(0);
 
   const canvasRef = useRef<ImageCanvasHandle>(null);
 
   const [defaultTextStyle, setDefaultTextStyle] = useState<DefaultTextStyle>({
     fontSize: 24,
+    color: '#ff4d4f',
+  });
+
+  const [defaultBrushStyle, setDefaultBrushStyle] = useState<DefaultBrushStyle>({
+    size: 6,
     color: '#ff4d4f',
   });
 
@@ -63,8 +65,8 @@ function ImageEditor() {
   const updateAnnotation = useImageEditorStore((s) => s.updateAnnotation);
   const removeAnnotation = useImageEditorStore((s) => s.removeAnnotation);
 
-  const selectedText =
-    annotations.find((a) => a.id === selectedId && a.type === 'text') ?? null;
+  const selected = annotations.find((a) => a.id === selectedId) ?? null;
+  const selectedText = selected?.type === 'text' ? selected : null;
 
   // 生成图片的 URL 并设置到状态中
   const loadImageUrl = async (path: string) => {
@@ -142,16 +144,7 @@ function ImageEditor() {
       case 'crop':
         return <CropToolPanel />;
       case 'adjust':
-        return (
-          <AdjustToolPanel
-            brightness={brightness}
-            contrast={contrast}
-            saturation={saturation}
-            onBrightnessChange={setBrightness}
-            onContrastChange={setContrast}
-            onSaturationChange={setSaturation}
-          />
-        );
+        return <AdjustToolPanel />;
       case 'text':
         return (
           <TextToolPanel
@@ -169,7 +162,14 @@ function ImageEditor() {
           />
         );
       case 'brush':
-        return <BrushToolPanel />;
+        return (
+          <BrushToolPanel
+            defaultStyle={defaultBrushStyle}
+            onDefaultStyleChange={(patch) =>
+              setDefaultBrushStyle((s) => ({ ...s, ...patch }))
+            }
+          />
+        );
       case 'mosaic':
         return <MosaicToolPanel />;
       case 'filter':
@@ -205,7 +205,12 @@ function ImageEditor() {
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
       >
-        <ImageCanvas ref={canvasRef} activeTool={activeTool} defaultTextStyle={defaultTextStyle} />
+        <ImageCanvas
+          ref={canvasRef}
+          activeTool={activeTool}
+          defaultTextStyle={defaultTextStyle}
+          defaultBrushStyle={defaultBrushStyle}
+        />
         {!imageSrc && (
           <div className="image-canvas__empty" onClick={handleImport}>
             <PictureOutlined style={{ fontSize: 48, marginBottom: 12 }} />

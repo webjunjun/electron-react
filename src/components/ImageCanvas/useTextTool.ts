@@ -8,7 +8,7 @@ import {
   Text,
 } from 'pixi.js';
 import { useImageEditorStore, TextAnnotation } from '../../store/imageEditorStore';
-import { getCanvasPoint, screenToWorld } from './coords';
+import { screenToWorld } from './coords';
 
 export interface DefaultTextStyle {
   fontSize: number;
@@ -45,6 +45,7 @@ const useTextTool = ({
 }: Options) => {
   const annotations = useImageEditorStore((s) => s.annotations);
   const selectedId = useImageEditorStore((s) => s.selectedId);
+  const zoom = useImageEditorStore((s) => s.zoom);
   const addAnnotation = useImageEditorStore((s) => s.addAnnotation);
   const updateAnnotation = useImageEditorStore((s) => s.updateAnnotation);
   const selectAnnotation = useImageEditorStore((s) => s.selectAnnotation);
@@ -58,6 +59,7 @@ const useTextTool = ({
     null
   );
 
+  // 当前选中的工具是否是 text 工具
   const isTextTool = activeTool === 'text';
 
   // 事件绑定：新增文字（点击空白）+ 拖动已有文字
@@ -75,11 +77,7 @@ const useTextTool = ({
       if (!isTextTool || !spriteRef.current) return;
       if (e.target !== stage) return; // 点到已有文字时交给文字自身处理
 
-      const { x: sx, y: sy } = getCanvasPoint(app.canvas, {
-        clientX: e.global.x,
-        clientY: e.global.y,
-      });
-      const { x, y } = screenToWorld(world, sx, sy);
+      const { x, y } = screenToWorld(world, e.global.x, e.global.y);
 
       addAnnotation({
         id: crypto.randomUUID(),
@@ -98,11 +96,7 @@ const useTextTool = ({
       if (!drag) return;
       const text = textMapRef.current.get(drag.id);
       if (!text) return;
-      const { x: sx, y: sy } = getCanvasPoint(app.canvas, {
-        clientX: e.global.x,
-        clientY: e.global.y,
-      });
-      const { x, y } = screenToWorld(world, sx, sy);
+      const { x, y } = screenToWorld(world, e.global.x, e.global.y);
       text.position.set(x - drag.offsetX, y - drag.offsetY);
       drawSelectionBox(text);
     };
@@ -175,17 +169,10 @@ const useTextTool = ({
         // 新增文字纹理对象
         text = new Text();
         text.on('pointerdown', (e: FederatedPointerEvent) => {
-          if (activeTool !== 'text') return;
+          // 非文字工具时 text.eventMode 为 'none'，此处不会触发，无需再判断工具
           e.stopPropagation();
           selectAnnotation(ann.id);
-          const { x: sx, y: sy } = getCanvasPoint(
-            appRef.current!.canvas,
-            {
-              clientX: e.global.x,
-              clientY: e.global.y,
-            }
-          );
-          const p = screenToWorld(world, sx, sy);
+          const p = screenToWorld(world, e.global.x, e.global.y);
           dragRef.current = {
             id: ann.id,
             offsetX: p.x - text!.position.x,
@@ -216,13 +203,22 @@ const useTextTool = ({
       }
     }
 
-    // 高亮框始终置顶并跟随选中项
+    // 高亮框始终置顶并跟随选中项（仅文字工具下显示）
     world.addChild(box);
     const selected = selectedId ? map.get(selectedId) : undefined;
-    if (selected) drawSelectionBox(selected);
+    if (selected && isTextTool) drawSelectionBox(selected);
     else box.visible = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annotations, selectedId, ready, isTextTool]);
+
+  // 缩放变化时重绘选中框，保持描边视觉宽度恒定（仅文字工具下）
+  useEffect(() => {
+    if (!ready) return;
+    const selected =
+      selectedId && isTextTool ? textMapRef.current.get(selectedId) : undefined;
+    if (selected) drawSelectionBox(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, ready, selectedId, isTextTool]);
 
   // 图片切换/卸载时清理文字对象
   useEffect(() => {

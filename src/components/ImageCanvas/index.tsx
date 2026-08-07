@@ -1,8 +1,13 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+// 必须在任何 PIXI 渲染器初始化前导入：用静态 polyfill 替换 new Function() 代码生成，
+// 以适配 Electron 禁止 unsafe-eval 的 CSP 环境（否则挂载滤镜会报错）。
+import 'pixi.js/unsafe-eval';
 import { Application, Assets, Container, Sprite, Texture } from 'pixi.js';
 import { useImageEditorStore } from '../../store/imageEditorStore';
 import useCanvasInteraction from './useCanvasInteraction';
 import useTextTool, { DefaultTextStyle } from './useTextTool';
+import useBrushTool, { DefaultBrushStyle } from './useBrushTool';
+import useAdjustments from './useAdjustments';
 
 const FIT_MARGIN = 0.9;
 
@@ -17,11 +22,17 @@ interface ImageCanvasProps {
   activeTool: string;
   /** 新建文字时的默认样式。 */
   defaultTextStyle: DefaultTextStyle;
+  /** 新建笔迹时的默认样式。 */
+  defaultBrushStyle: DefaultBrushStyle;
 }
 
 // forwardRef: 用于外部获取组件实例，让ref如同props一样，可以透传给组件内部的ref。
 
-const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({ activeTool, defaultTextStyle }, ref) => {
+const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
+  activeTool,
+  defaultTextStyle,
+  defaultBrushStyle
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const worldRef = useRef<Container | null>(null);
@@ -34,6 +45,8 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({ activeToo
 
   useCanvasInteraction({ appRef, worldRef, spriteRef, activeTool, ready });
   useTextTool({ appRef, worldRef, spriteRef, activeTool, ready, defaultStyle: defaultTextStyle });
+  useBrushTool({ appRef, worldRef, spriteRef, activeTool, ready, defaultStyle: defaultBrushStyle });
+  useAdjustments({ spriteRef, ready, imageSrc });
 
   const fitToScreen = () => {
     const app = appRef.current;
