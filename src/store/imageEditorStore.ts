@@ -43,6 +43,21 @@ export interface BrushAnnotation extends BaseAnnotation {
 /** 所有标注对象的联合类型。 */
 export type Annotation = TextAnnotation | BrushAnnotation;
 
+/** 马赛克/模糊区域的效果类型。 */
+export type MosaicMode = 'mosaic' | 'blur';
+
+/** 一块马赛克/模糊区域，坐标与尺寸均为 world 局部单位。 */
+export interface MosaicRegion {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  mode: MosaicMode;
+  /** 马赛克格子大小 / 模糊强度（world 单位）。 */
+  strength: number;
+}
+
 /** 调色参数，取值范围 -100 ~ 100，0 表示无调整。 */
 export interface Adjustments {
   brightness: number;
@@ -75,6 +90,12 @@ interface ImageEditorState {
   /** 图片调色参数（作用于图片本身，不影响标注）。 */
   adjustments: Adjustments;
 
+  /** 当前选中的滤镜预设 id（null = 无滤镜）。 */
+  filterId: string | null;
+
+  /** 所有马赛克/模糊区域。 */
+  mosaics: MosaicRegion[];
+
   /** 加载新的图片，撤销之前的 ObjectURL 来避免内存泄漏。 */
   setImage: (diskSrc: string, blobUrl: string, size: ImageSize) => void;
   /** 更新显示的缩放比例（由画布调用）。 */
@@ -95,6 +116,14 @@ interface ImageEditorState {
   setAdjustment: (patch: Partial<Adjustments>) => void;
   /** 调色参数归零。 */
   resetAdjustments: () => void;
+
+  /** 设置当前滤镜预设（传 null 取消滤镜）。 */
+  setFilter: (id: string | null) => void;
+
+  /** 新增一块马赛克/模糊区域。 */
+  addMosaic: (region: MosaicRegion) => void;
+  /** 清除全部马赛克/模糊区域。 */
+  clearMosaics: () => void;
 }
 
 export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
@@ -105,6 +134,8 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
   annotations: [], // 所有标注对象
   selectedId: null, // 当前选中的标注 id
   adjustments: { ...DEFAULT_ADJUSTMENTS }, // 图片调色参数
+  filterId: null, // 当前滤镜预设 id
+  mosaics: [], // 所有马赛克/模糊区域
 
   setImage: (diskSrc, blobUrl, size) => {
     const prev = get().imageSrc;
@@ -120,6 +151,8 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
       annotations: [],
       selectedId: null,
       adjustments: { ...DEFAULT_ADJUSTMENTS },
+      filterId: null,
+      mosaics: [],
     });
   },
 
@@ -139,6 +172,8 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
       annotations: [],
       selectedId: null,
       adjustments: { ...DEFAULT_ADJUSTMENTS },
+      filterId: null,
+      mosaics: [],
     });
   },
 
@@ -164,4 +199,10 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
     set((s) => ({ adjustments: { ...s.adjustments, ...patch } })),
 
   resetAdjustments: () => set({ adjustments: { ...DEFAULT_ADJUSTMENTS } }),
+
+  setFilter: (id) => set({ filterId: id }),
+
+  addMosaic: (region) => set((s) => ({ mosaics: [...s.mosaics, region] })),
+
+  clearMosaics: () => set({ mosaics: [] }),
 }));

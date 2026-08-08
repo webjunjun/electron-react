@@ -20,15 +20,23 @@ const useAdjustments = ({ spriteRef, ready, imageSrc }: Options) => {
     const sprite = spriteRef.current;
     if (!ready || !sprite) return;
 
-    // 复用已挂载的 ColorMatrixFilter，没有则新建
-    let filter = sprite.filters
-      ? (Array.isArray(sprite.filters) ? sprite.filters : [sprite.filters]).find(
-          (f): f is ColorMatrixFilter => f instanceof ColorMatrixFilter
-        )
-      : undefined;
+    // 当前 sprite 上的滤镜数组（可能同时含调色与滤镜预设两个 filter）
+    const current = sprite.filters
+      ? Array.isArray(sprite.filters)
+        ? sprite.filters
+        : [sprite.filters]
+      : [];
+
+    // 只认属于「调色」角色的 ColorMatrixFilter，避免和滤镜预设 filter 互相顶掉
+    let filter = current.find(
+      (f): f is ColorMatrixFilter =>
+        f instanceof ColorMatrixFilter && (f as ColorMatrixFilter & { __role?: string }).__role === 'adjust'
+    );
     if (!filter) {
       filter = new ColorMatrixFilter();
-      sprite.filters = [filter];
+      (filter as ColorMatrixFilter & { __role?: string }).__role = 'adjust';
+      // 保留其它 filter（如滤镜预设），调色固定放在最前
+      sprite.filters = [filter, ...current];
     }
 
     const { brightness, contrast, saturation } = adjustments;

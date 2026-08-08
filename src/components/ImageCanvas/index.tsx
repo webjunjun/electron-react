@@ -8,6 +8,8 @@ import useCanvasInteraction from './useCanvasInteraction';
 import useTextTool, { DefaultTextStyle } from './useTextTool';
 import useBrushTool, { DefaultBrushStyle } from './useBrushTool';
 import useAdjustments from './useAdjustments';
+import useFilter from './useFilter';
+import useMosaicTool, { DefaultMosaicStyle } from './useMosaicTool';
 
 const FIT_MARGIN = 0.9;
 
@@ -24,6 +26,8 @@ interface ImageCanvasProps {
   defaultTextStyle: DefaultTextStyle;
   /** 新建笔迹时的默认样式。 */
   defaultBrushStyle: DefaultBrushStyle;
+  /** 新建马赛克/模糊区域时的默认参数。 */
+  defaultMosaicStyle: DefaultMosaicStyle;
 }
 
 // forwardRef: 用于外部获取组件实例，让ref如同props一样，可以透传给组件内部的ref。
@@ -31,7 +35,8 @@ interface ImageCanvasProps {
 const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
   activeTool,
   defaultTextStyle,
-  defaultBrushStyle
+  defaultBrushStyle,
+  defaultMosaicStyle
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -47,6 +52,8 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
   useTextTool({ appRef, worldRef, spriteRef, activeTool, ready, defaultStyle: defaultTextStyle });
   useBrushTool({ appRef, worldRef, spriteRef, activeTool, ready, defaultStyle: defaultBrushStyle });
   useAdjustments({ spriteRef, ready, imageSrc });
+  useFilter({ spriteRef, ready, imageSrc });
+  useMosaicTool({ appRef, worldRef, spriteRef, activeTool, ready, imageSrc, defaultStyle: defaultMosaicStyle });
 
   const fitToScreen = () => {
     const app = appRef.current;

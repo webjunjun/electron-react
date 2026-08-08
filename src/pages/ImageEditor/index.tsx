@@ -24,6 +24,7 @@ import CropToolPanel from './CropToolPanel';
 import AdjustToolPanel from './AdjustToolPanel';
 import BrushToolPanel, { DefaultBrushStyle } from './BrushToolPanel';
 import MosaicToolPanel from './MosaicToolPanel';
+import { DefaultMosaicStyle } from '../../components/ImageCanvas/useMosaicTool';
 import FilterToolPanel from './FilterToolPanel';
 
 const tools: RailTool[] = [
@@ -54,6 +55,11 @@ function ImageEditor() {
   const [defaultBrushStyle, setDefaultBrushStyle] = useState<DefaultBrushStyle>({
     size: 6,
     color: '#ff4d4f',
+  });
+
+  const [defaultMosaicStyle, setDefaultMosaicStyle] = useState<DefaultMosaicStyle>({
+    mode: 'mosaic',
+    strength: 15,
   });
 
   const imageSrc = useImageEditorStore((s) => s.imageSrc);
@@ -171,7 +177,14 @@ function ImageEditor() {
           />
         );
       case 'mosaic':
-        return <MosaicToolPanel />;
+        return (
+          <MosaicToolPanel
+            defaultStyle={defaultMosaicStyle}
+            onDefaultStyleChange={(patch) =>
+              setDefaultMosaicStyle((s) => ({ ...s, ...patch }))
+            }
+          />
+        );
       case 'filter':
         return <FilterToolPanel />;
       default:
@@ -210,6 +223,7 @@ function ImageEditor() {
           activeTool={activeTool}
           defaultTextStyle={defaultTextStyle}
           defaultBrushStyle={defaultBrushStyle}
+          defaultMosaicStyle={defaultMosaicStyle}
         />
         {!imageSrc && (
           <div className="image-canvas__empty" onClick={handleImport}>

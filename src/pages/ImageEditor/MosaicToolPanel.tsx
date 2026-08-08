@@ -1,20 +1,24 @@
-import { useState } from 'react';
 import { Button, Segmented, Slider, Space, Typography } from 'antd';
 import { ClearOutlined } from '@ant-design/icons';
+import { useImageEditorStore } from '../../store/imageEditorStore';
+import { DefaultMosaicStyle } from '../../components/ImageCanvas/useMosaicTool';
 
 const { Text } = Typography;
-
-/** 马赛克效果类型。 */
-export type MosaicMode = 'mosaic' | 'blur';
 
 const STRENGTH_MIN = 5;
 const STRENGTH_MAX = 50;
 
+interface MosaicToolPanelProps {
+  /** 新建区域的默认参数。 */
+  defaultStyle: DefaultMosaicStyle;
+  /** 修改默认参数。 */
+  onDefaultStyleChange: (patch: Partial<DefaultMosaicStyle>) => void;
+}
+
 /** 马赛克工具的属性面板：效果类型 + 强度 + 清除。 */
-function MosaicToolPanel() {
-  // UI 阶段先用本地状态，后续接入 store
-  const [mode, setMode] = useState<MosaicMode>('mosaic');
-  const [strength, setStrength] = useState(15);
+function MosaicToolPanel({ defaultStyle, onDefaultStyleChange }: MosaicToolPanelProps) {
+  const mosaicCount = useImageEditorStore((s) => s.mosaics.length);
+  const clearMosaics = useImageEditorStore((s) => s.clearMosaics);
 
   return (
     <>
@@ -28,8 +32,10 @@ function MosaicToolPanel() {
           </Text>
           <Segmented
             block
-            value={mode}
-            onChange={(v) => setMode(v as MosaicMode)}
+            value={defaultStyle.mode}
+            onChange={(v) =>
+              onDefaultStyleChange({ mode: v as DefaultMosaicStyle['mode'] })
+            }
             options={[
               { label: '马赛克', value: 'mosaic' },
               { label: '模糊', value: 'blur' },
@@ -39,18 +45,24 @@ function MosaicToolPanel() {
 
         <div>
           <Text type="secondary">
-            {mode === 'mosaic' ? '格子大小' : '模糊强度'}
+            {defaultStyle.mode === 'mosaic' ? '格子大小' : '模糊强度'}
           </Text>
           <Slider
             min={STRENGTH_MIN}
             max={STRENGTH_MAX}
-            value={strength}
-            onChange={setStrength}
+            value={defaultStyle.strength}
+            onChange={(v) => onDefaultStyleChange({ strength: v })}
           />
         </div>
 
-        <Button block danger icon={<ClearOutlined />}>
-          清除全部
+        <Button
+          block
+          danger
+          icon={<ClearOutlined />}
+          disabled={mosaicCount === 0}
+          onClick={clearMosaics}
+        >
+          清除全部{mosaicCount > 0 ? `（${mosaicCount}）` : ''}
         </Button>
       </Space>
     </>
