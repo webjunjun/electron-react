@@ -21,6 +21,8 @@ export interface DefaultBrushStyle {
 interface Options {
   appRef: RefObject<Application | null>;
   worldRef: RefObject<Container | null>;
+  /** 标注层容器：笔迹挂在此层（位于底图/马赛克之上）。 */
+  annotationLayerRef: RefObject<Container | null>;
   spriteRef: RefObject<Sprite | null>;
   activeTool: string;
   ready: boolean;
@@ -58,6 +60,7 @@ const drawStroke = (
 const useBrushTool = ({
   appRef,
   worldRef,
+  annotationLayerRef,
   spriteRef,
   activeTool,
   ready,
@@ -65,6 +68,7 @@ const useBrushTool = ({
 }: Options) => {
   const annotations = useImageEditorStore((s) => s.annotations);
   const addAnnotation = useImageEditorStore((s) => s.addAnnotation);
+  const pushHistory = useImageEditorStore((s) => s.pushHistory);
 
   // id -> PIXI.Graphics 映射，用于增量同步
   const strokeMapRef = useRef<Map<string, Graphics>>(new Map());
@@ -89,10 +93,12 @@ const useBrushTool = ({
 
     const handleDown = (e: FederatedPointerEvent) => {
       if (!isBrushTool || !spriteRef.current) return;
+      const layer = annotationLayerRef.current;
+      if (!layer) return;
       const anchor = screenToWorld(world, e.global.x, e.global.y);
       const g = new Graphics();
       g.position.set(anchor.x, anchor.y);
-      world.addChild(g);
+      layer.addChild(g);
       drawingRef.current = { graphics: g, anchor, points: [{ x: 0, y: 0 }] };
     };
 
@@ -117,8 +123,9 @@ const useBrushTool = ({
       if (!drawing) return;
       drawingRef.current = null;
       // 移除临时图形，交给 store 同步重建
-      world.removeChild(drawing.graphics);
+      drawing.graphics.parent?.removeChild(drawing.graphics);
       drawing.graphics.destroy();
+      pushHistory(); // 新增笔迹前记录历史
       // 少于 2 个点视为无效笔迹（点一下也保留为圆点）
       addAnnotation({
         id: crypto.randomUUID(),
@@ -147,8 +154,8 @@ const useBrushTool = ({
 
   // 同步：根据 annotations 增量更新 PIXI.Graphics
   useEffect(() => {
-    const world = worldRef.current;
-    if (!world || !ready) return;
+    const layer = annotationLayerRef.current;
+    if (!layer || !ready) return;
 
     const map = strokeMapRef.current;
     const seen = new Set<string>();
@@ -159,7 +166,7 @@ const useBrushTool = ({
       let g = map.get(ann.id);
       if (!g) {
         g = new Graphics();
-        world.addChild(g);
+        layer.addChild(g);
         map.set(ann.id, g);
       }
       g.position.set(ann.x, ann.y);
@@ -169,7 +176,7 @@ const useBrushTool = ({
     // 删除已不存在的笔迹
     for (const [id, g] of map) {
       if (!seen.has(id)) {
-        world.removeChild(g);
+        g.parent?.removeChild(g);
         g.destroy();
         map.delete(id);
       }

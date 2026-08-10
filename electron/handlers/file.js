@@ -19,4 +19,21 @@ export const registerFileHandlers = (ipcMain) => {
       return null;
     }
   });
+  // 注册保存图片：弹出另存为对话框并写入 PNG
+  ipcMain.handle('saveImage', async (_event, { base64, defaultFileName = 'export.png' }) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出图片',
+      defaultPath: defaultFileName,
+      filters: [{ name: 'PNG 图片', extensions: ['png'] }],
+    });
+    if (canceled || !filePath) return { saved: false };
+    try {
+      // base64 去掉 data:image/png;base64, 前缀后写入
+      const data = base64.replace(/^data:image\/\w+;base64,/, '');
+      fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
+      return { saved: true, filePath };
+    } catch (error) {
+      return { saved: false, error: String(error) };
+    }
+  });
 }

@@ -5,6 +5,10 @@ export interface ElectronAPI {
     filePath: string,
     codeFormat?: string
   }) => Promise<string | undefined>,
+  saveImage: (options: {
+    base64: string,
+    defaultFileName?: string
+  }) => Promise<{ saved: boolean; filePath?: string; error?: string }>,
 }
 
 declare global {

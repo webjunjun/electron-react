@@ -12,13 +12,17 @@ const SAMPLE_IMG = filter_sample;
 function FilterToolPanel() {
   const filterId = useImageEditorStore((s) => s.filterId);
   const setFilter = useImageEditorStore((s) => s.setFilter);
+  const pushHistory = useImageEditorStore((s) => s.pushHistory);
 
   // 当前选中：filterId 为 null 时视为「原图」(id: none)
   const activeId = filterId ?? 'none';
 
   const handleSelect = (id: string) => {
+    const next = id === 'none' ? null : id;
+    if (next === filterId) return; // 点击当前已选中的，不产生历史
+    pushHistory();
     // 选「原图」存 null，其余存对应 id
-    setFilter(id === 'none' ? null : id);
+    setFilter(next);
   };
 
   return (

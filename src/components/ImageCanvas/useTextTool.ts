@@ -18,6 +18,8 @@ export interface DefaultTextStyle {
 interface Options {
   appRef: RefObject<Application | null>;
   worldRef: RefObject<Container | null>;
+  /** 标注层容器：文字对象与高亮框挂在此层（位于底图/马赛克之上）。 */
+  annotationLayerRef: RefObject<Container | null>;
   spriteRef: RefObject<Sprite | null>;
   activeTool: string;
   ready: boolean;
@@ -38,6 +40,7 @@ const NEW_TEXT_CONTENT = '默认文字';
 const useTextTool = ({
   appRef,
   worldRef,
+  annotationLayerRef,
   spriteRef,
   activeTool,
   ready,
@@ -49,15 +52,19 @@ const useTextTool = ({
   const addAnnotation = useImageEditorStore((s) => s.addAnnotation);
   const updateAnnotation = useImageEditorStore((s) => s.updateAnnotation);
   const selectAnnotation = useImageEditorStore((s) => s.selectAnnotation);
+  const pushHistory = useImageEditorStore((s) => s.pushHistory);
 
   // id -> PIXI.Text 映射，用于增量同步
   const textMapRef = useRef<Map<string, Text>>(new Map());
   // 选中高亮框
   const selectionBoxRef = useRef<Graphics | null>(null);
   // 拖动状态
-  const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(
-    null
-  );
+  const dragRef = useRef<{
+    id: string;
+    offsetX: number;
+    offsetY: number;
+    moved: boolean;
+  } | null>(null);
 
   // 当前选中的工具是否是 text 工具
   const isTextTool = activeTool === 'text';
@@ -79,6 +86,7 @@ const useTextTool = ({
 
       const { x, y } = screenToWorld(world, e.global.x, e.global.y);
 
+      pushHistory(); // 新增文字前记录历史
       addAnnotation({
         id: crypto.randomUUID(),
         type: 'text',
@@ -98,6 +106,7 @@ const useTextTool = ({
       if (!text) return;
       const { x, y } = screenToWorld(world, e.global.x, e.global.y);
       text.position.set(x - drag.offsetX, y - drag.offsetY);
+      drag.moved = true;
       drawSelectionBox(text);
     };
 
@@ -106,7 +115,8 @@ const useTextTool = ({
       const drag = dragRef.current;
       if (!drag) return;
       const text = textMapRef.current.get(drag.id);
-      if (text) {
+      if (text && drag.moved) {
+        pushHistory(); // 仅真正发生移动时记录历史
         updateAnnotation(drag.id, { x: text.position.x, y: text.position.y });
       }
       dragRef.current = null;
@@ -147,7 +157,8 @@ const useTextTool = ({
   // 同步：根据 annotations / selectedId 增量更新 PIXI.Text
   useEffect(() => {
     const world = worldRef.current;
-    if (!world || !ready) return;
+    const layer = annotationLayerRef.current;
+    if (!world || !layer || !ready) return;
 
     // 确保高亮框存在且位于最上层
     if (!selectionBoxRef.current) {
@@ -156,7 +167,7 @@ const useTextTool = ({
       selectionBoxRef.current = box;
     }
     const box = selectionBoxRef.current;
-    world.addChild(box);
+    layer.addChild(box);
 
     const map = textMapRef.current;
     const seen = new Set<string>();
@@ -177,9 +188,10 @@ const useTextTool = ({
             id: ann.id,
             offsetX: p.x - text!.position.x,
             offsetY: p.y - text!.position.y,
+            moved: false,
           };
         });
-        world.addChild(text);
+        layer.addChild(text);
         map.set(ann.id, text);
       }
       // 更新属性
@@ -197,14 +209,14 @@ const useTextTool = ({
     // 删除已不存在的文字
     for (const [id, text] of map) {
       if (!seen.has(id)) {
-        world.removeChild(text);
+        layer.removeChild(text);
         text.destroy();
         map.delete(id);
       }
     }
 
     // 高亮框始终置顶并跟随选中项（仅文字工具下显示）
-    world.addChild(box);
+    layer.addChild(box);
     const selected = selectedId ? map.get(selectedId) : undefined;
     if (selected && isTextTool) drawSelectionBox(selected);
     else box.visible = false;

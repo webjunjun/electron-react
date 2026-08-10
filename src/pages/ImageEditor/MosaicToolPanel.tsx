@@ -19,6 +19,12 @@ interface MosaicToolPanelProps {
 function MosaicToolPanel({ defaultStyle, onDefaultStyleChange }: MosaicToolPanelProps) {
   const mosaicCount = useImageEditorStore((s) => s.mosaics.length);
   const clearMosaics = useImageEditorStore((s) => s.clearMosaics);
+  const pushHistory = useImageEditorStore((s) => s.pushHistory);
+
+  const handleClear = () => {
+    pushHistory();
+    clearMosaics();
+  };
 
   return (
     <>
@@ -60,7 +66,7 @@ function MosaicToolPanel({ defaultStyle, onDefaultStyleChange }: MosaicToolPanel
           danger
           icon={<ClearOutlined />}
           disabled={mosaicCount === 0}
-          onClick={clearMosaics}
+          onClick={handleClear}
         >
           清除全部{mosaicCount > 0 ? `（${mosaicCount}）` : ''}
         </Button>

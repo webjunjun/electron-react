@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { App, Button, Space } from 'antd';
 import {
   PictureOutlined,
@@ -70,9 +70,51 @@ function ImageEditor() {
   const selectedId = useImageEditorStore((s) => s.selectedId);
   const updateAnnotation = useImageEditorStore((s) => s.updateAnnotation);
   const removeAnnotation = useImageEditorStore((s) => s.removeAnnotation);
+  const undo = useImageEditorStore((s) => s.undo);
+  const redo = useImageEditorStore((s) => s.redo);
+  // 订阅栈长度，驱动按钮禁用态刷新
+  const canUndo = useImageEditorStore((s) => s.past.length > 0);
+  const canRedo = useImageEditorStore((s) => s.future.length > 0);
 
   const selected = annotations.find((a) => a.id === selectedId) ?? null;
   const selectedText = selected?.type === 'text' ? selected : null;
+
+  // 快捷键：Ctrl/Cmd+Z 撤销，Ctrl/Cmd+Shift+Z 重做
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod || e.key.toLowerCase() !== 'z') return;
+      // 输入框内不拦截，交给原生撤销
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [undo, redo]);
+
+  // 导出：渲染画框内所有图层为 PNG，弹出另存为对话框写入磁盘
+  const handleExport = async () => {
+    const dataUrl = await canvasRef.current?.exportImage();
+    if (!dataUrl) {
+      message.error('导出失败：无法生成图片');
+      return;
+    }
+    const result = await window.electronAPI.saveImage({
+      base64: dataUrl,
+      defaultFileName: `export-${Date.now()}.png`,
+    });
+    if (result.saved) {
+      message.success(`已保存到 ${result.filePath}`);
+    } else if (result.error) {
+      message.error(`保存失败：${result.error}`);
+    }
+    // 用户取消（saved:false 且无 error）时静默处理
+  };
 
   // 生成图片的 URL 并设置到状态中
   const loadImageUrl = async (path: string) => {
@@ -135,9 +177,26 @@ function ImageEditor() {
       >
         100%
       </Button>
-      <Button type="text" icon={<UndoOutlined />} disabled />
-      <Button type="text" icon={<RedoOutlined />} disabled />
-      <Button type="primary" icon={<ExportOutlined />} disabled={!imageSrc}>
+      <Button
+        type="text"
+        icon={<UndoOutlined />}
+        disabled={!canUndo}
+        onClick={undo}
+        title="撤销 (Ctrl+Z)"
+      />
+      <Button
+        type="text"
+        icon={<RedoOutlined />}
+        disabled={!canRedo}
+        onClick={redo}
+        title="重做 (Ctrl+Shift+Z)"
+      />
+      <Button
+        type="primary"
+        icon={<ExportOutlined />}
+        disabled={!imageSrc}
+        onClick={handleExport}
+      >
         导出
       </Button>
     </Space>

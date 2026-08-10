@@ -72,6 +72,73 @@ export const DEFAULT_ADJUSTMENTS: Adjustments = {
   saturation: 0,
 };
 
+/** 输出画框（裁剪框），world 局部坐标，与 sprite/mosaic 同坐标系。 */
+export interface Frame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** 画框最小尺寸（world 单位），避免拖成不可见。 */
+const MIN_FRAME_SIZE = 20;
+
+/**
+ * 把画框约束在图片边界内（图片 anchor 0.5，边界为 [-w/2, -h/2, w, h]），
+ * 并保证宽高不小于 MIN_FRAME_SIZE。
+ */
+const clampFrame = (frame: Frame, size: ImageSize): Frame => {
+  const left = -size.width / 2;
+  const top = -size.height / 2;
+  const right = size.width / 2;
+  const bottom = size.height / 2;
+  // 尺寸先夹到 [MIN, 图片尺寸]
+  const width = Math.min(Math.max(frame.width, MIN_FRAME_SIZE), size.width);
+  const height = Math.min(Math.max(frame.height, MIN_FRAME_SIZE), size.height);
+  // 位置夹到边界内
+  const x = Math.min(Math.max(frame.x, left), right - width);
+  const y = Math.min(Math.max(frame.y, top), bottom - height);
+  return { x, y, width, height };
+};
+
+/** 由图片尺寸生成默认全图画框。 */
+const fullFrame = (size: ImageSize): Frame => ({
+  x: -size.width / 2,
+  y: -size.height / 2,
+  width: size.width,
+  height: size.height,
+});
+
+/** 纳入历史记录的可编辑状态快照。 */
+export interface EditorSnapshot {
+  annotations: Annotation[];
+  adjustments: Adjustments;
+  filterId: string | null;
+  mosaics: MosaicRegion[];
+  frame: Frame | null;
+  cropRatio: number | null;
+}
+
+/** 历史栈上限，超出丢弃最旧的。 */
+const HISTORY_LIMIT = 50;
+
+/** 从当前 state 抽取一份快照（深拷贝，避免与后续 set 共享引用）。 */
+const takeSnapshot = (s: {
+  annotations: Annotation[];
+  adjustments: Adjustments;
+  filterId: string | null;
+  mosaics: MosaicRegion[];
+  frame: Frame | null;
+  cropRatio: number | null;
+}): EditorSnapshot => ({
+  annotations: s.annotations.map((a) => ({ ...a })),
+  adjustments: { ...s.adjustments },
+  filterId: s.filterId,
+  mosaics: s.mosaics.map((m) => ({ ...m })),
+  frame: s.frame ? { ...s.frame } : null,
+  cropRatio: s.cropRatio,
+});
+
 interface ImageEditorState {
   /** 当前加载的图片在磁盘上的路径。 */
   diskImageSrc: string | null;
@@ -95,6 +162,16 @@ interface ImageEditorState {
 
   /** 所有马赛克/模糊区域。 */
   mosaics: MosaicRegion[];
+
+  /** 输出画框（裁剪框），null = 未初始化（无图片）。 */
+  frame: Frame | null;
+  /** 当前锁定的裁剪比例（宽/高），null = 自由。 */
+  cropRatio: number | null;
+
+  /** 历史记录：已发生的快照栈（不含当前状态）。 */
+  past: EditorSnapshot[];
+  /** 历史记录：被撤销的快照栈（可重做）。 */
+  future: EditorSnapshot[];
 
   /** 加载新的图片，撤销之前的 ObjectURL 来避免内存泄漏。 */
   setImage: (diskSrc: string, blobUrl: string, size: ImageSize) => void;
@@ -124,6 +201,23 @@ interface ImageEditorState {
   addMosaic: (region: MosaicRegion) => void;
   /** 清除全部马赛克/模糊区域。 */
   clearMosaics: () => void;
+
+  /** 设置输出画框（自动约束在图片边界内）。 */
+  setFrame: (frame: Frame) => void;
+  /** 重置画框为全图。 */
+  resetFrame: () => void;
+  /** 设置裁剪比例（宽/高，null = 自由）；非 null 时把当前画框调整到该比例。 */
+  setCropRatio: (ratio: number | null) => void;
+
+  /** 把当前状态压入历史（在“完成一步操作”后调用）。 */
+  pushHistory: () => void;
+  /** 撤销：回到上一个快照。 */
+  undo: () => void;
+  /** 重做：恢复被撤销的快照。 */
+  redo: () => void;
+  /** 是否可撤销/重做（供按钮禁用态使用）。 */
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 }
 
 export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
@@ -136,6 +230,10 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
   adjustments: { ...DEFAULT_ADJUSTMENTS }, // 图片调色参数
   filterId: null, // 当前滤镜预设 id
   mosaics: [], // 所有马赛克/模糊区域
+  frame: null, // 输出画框
+  cropRatio: null, // 裁剪比例锁定
+  past: [], // 历史快照栈
+  future: [], // 重做快照栈
 
   setImage: (diskSrc, blobUrl, size) => {
     const prev = get().imageSrc;
@@ -143,7 +241,7 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
       // 先撤销之前的ObjectURL，避免内存泄漏
       URL.revokeObjectURL(prev);
     }
-    // 切换图片时清空标注与调色
+    // 切换图片时清空标注与调色，并重置历史（新图是全新的基线）
     set({
       diskImageSrc: diskSrc,
       imageSize: size,
@@ -153,6 +251,10 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
       adjustments: { ...DEFAULT_ADJUSTMENTS },
       filterId: null,
       mosaics: [],
+      frame: fullFrame(size), // 默认全图
+      cropRatio: null,
+      past: [],
+      future: [],
     });
   },
 
@@ -174,6 +276,10 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
       adjustments: { ...DEFAULT_ADJUSTMENTS },
       filterId: null,
       mosaics: [],
+      frame: null,
+      cropRatio: null,
+      past: [],
+      future: [],
     });
   },
 
@@ -205,4 +311,89 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
   addMosaic: (region) => set((s) => ({ mosaics: [...s.mosaics, region] })),
 
   clearMosaics: () => set({ mosaics: [] }),
+
+  setFrame: (frame) =>
+    set((s) => {
+      if (!s.imageSize) return {};
+      return { frame: clampFrame(frame, s.imageSize) };
+    }),
+
+  resetFrame: () =>
+    set((s) => {
+      if (!s.imageSize) return {};
+      return { frame: fullFrame(s.imageSize), cropRatio: null };
+    }),
+
+  setCropRatio: (ratio) =>
+    set((s) => {
+      if (ratio === null || !s.imageSize || !s.frame) return { cropRatio: ratio };
+      // 以当前画框中心为锚，在图片内生成尽可能大的目标比例画框
+      const size = s.imageSize;
+      const cx = s.frame.x + s.frame.width / 2;
+      const cy = s.frame.y + s.frame.height / 2;
+      // 目标比例下，先按图片可容纳的最大尺寸求解
+      let width = Math.min(s.frame.width, size.width);
+      let height = width / ratio;
+      if (height > size.height) {
+        height = size.height;
+        width = height * ratio;
+      }
+      const next = clampFrame(
+        { x: cx - width / 2, y: cy - height / 2, width, height },
+        size
+      );
+      return { cropRatio: ratio, frame: next };
+    }),
+
+  pushHistory: () =>
+    set((s) => {
+      // 记录“操作前”的当前状态；一旦产生新历史，重做栈失效
+      const snap = takeSnapshot(s);
+      const past = [...s.past, snap];
+      // 超出上限丢弃最旧的
+      if (past.length > HISTORY_LIMIT) past.shift();
+      return { past, future: [] };
+    }),
+
+  undo: () =>
+    set((s) => {
+      if (s.past.length === 0) return {};
+      const past = [...s.past];
+      const prev = past.pop()!;
+      // 把当前状态推入 future，供重做
+      const current = takeSnapshot(s);
+      return {
+        past,
+        future: [...s.future, current],
+        annotations: prev.annotations,
+        adjustments: prev.adjustments,
+        filterId: prev.filterId,
+        mosaics: prev.mosaics,
+        frame: prev.frame,
+        cropRatio: prev.cropRatio,
+        selectedId: null,
+      };
+    }),
+
+  redo: () =>
+    set((s) => {
+      if (s.future.length === 0) return {};
+      const future = [...s.future];
+      const next = future.pop()!;
+      const current = takeSnapshot(s);
+      return {
+        past: [...s.past, current],
+        future,
+        annotations: next.annotations,
+        adjustments: next.adjustments,
+        filterId: next.filterId,
+        mosaics: next.mosaics,
+        frame: next.frame,
+        cropRatio: next.cropRatio,
+        selectedId: null,
+      };
+    }),
+
+  canUndo: () => get().past.length > 0,
+  canRedo: () => get().future.length > 0,
 }));
