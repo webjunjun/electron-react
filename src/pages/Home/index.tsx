@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Typography, Row, Col, Card } from 'antd';
-import { PictureOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { PictureOutlined, VideoCameraOutlined, ScanOutlined } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
 
@@ -32,6 +32,15 @@ const entries: EntryItem[] = [
     path: '/video-editor',
     icon: <VideoCameraOutlined />,
     color: '#722ed1',
+    enabled: true,
+  },
+  {
+    key: 'ocr',
+    title: '文字识别',
+    description: '从图片中扫描并提取文字（OCR）',
+    path: '/ocr',
+    icon: <ScanOutlined />,
+    color: '#13c2c2',
     enabled: true,
   },
 ];

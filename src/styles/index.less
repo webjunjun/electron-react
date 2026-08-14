@@ -2,6 +2,7 @@
 @import './editor-shell.less';
 @import './image-editor.less';
 @import './video-editor.less';
+@import './ocr.less';
 
 // ── Global base ───────────────────────────────────────────────────────
 * {
@@ -32,6 +33,26 @@ body {
   height: 100vh;
   overflow: hidden;
   background: @bg-app;
+}
+
+// ── Scrollbar ─────────────────────────────────────────────────────────
+// 全局滚动条粗细与配色（Electron 基于 Chromium，支持 -webkit-scrollbar）
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: @border-color;
+  border-radius: 4px;
+
+  &:hover {
+    background: @text-secondary;
+  }
 }
 
 // ── Home / launcher ───────────────────────────────────────────────────

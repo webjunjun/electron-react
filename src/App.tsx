@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Home from './pages/Home';
 import ImageEditor from './pages/ImageEditor';
 import VideoEditor from './pages/VideoEditor';
+import Ocr from './pages/Ocr';
 
 function App() {
   return (
@@ -10,6 +11,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/image-editor" element={<ImageEditor />} />
         <Route path="/video-editor" element={<VideoEditor />} />
+        <Route path="/ocr" element={<Ocr />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
