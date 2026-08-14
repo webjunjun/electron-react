@@ -116,25 +116,19 @@ function ImageEditor() {
     // 用户取消（saved:false 且无 error）时静默处理
   };
 
-  // 生成图片的 URL 并设置到状态中
-  const loadImageUrl = async (path: string) => {
-    const fileBuffer = await window.electronAPI.readSourceFile({
-      filePath: path,
-      codeFormat: ''
-    });
-    if (!fileBuffer) return;
-    const ext = path.split('.').pop();
-    const blob = new Blob([fileBuffer], { type: `image/${ext}` });
-    const blobUrl = URL.createObjectURL(blob);
+  // 生成图片的 URL 并设置到状态中：走 app://local 自定义协议直连本地文件，
+  // 直接使用自定义协议 URL 加载磁盘图片，避免创建中间内存 URL
+  const loadImageUrl = (path: string) => {
+    const url = `app://local/${encodeURI(path)}`;
     const probe = new Image();
     probe.onload = () => {
-      setImage(path, blobUrl, {
+      setImage(path, url, {
         width: probe.naturalWidth,
         height: probe.naturalHeight
       });
     };
     probe.onerror = () => message.error('图片加载失败');
-    probe.src = blobUrl;
+    probe.src = url;
   };
 
   // 点击导入图片

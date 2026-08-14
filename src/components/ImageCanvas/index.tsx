@@ -49,7 +49,6 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
   const baseLayerRef = useRef<Container | null>(null);
   const annotationLayerRef = useRef<Container | null>(null);
   const spriteRef = useRef<Sprite | null>(null);
-  const loadedSrcRef = useRef<string | null>(null);
   const [ready, setReady] = useState(false);
 
   const imageSrc = useImageEditorStore((s) => s.imageSrc);
@@ -175,7 +174,6 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
       baseLayerRef.current = null;
       annotationLayerRef.current = null;
       if (appRef.current) { appRef.current.destroy(true); appRef.current = null; }
-      loadedSrcRef.current = null;
       setReady(false);
     };
   }, []);
@@ -191,9 +189,8 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
       }
       const baseLayer = baseLayerRef.current;
       if (spriteRef.current) { spriteRef.current.parent?.removeChild(spriteRef.current); spriteRef.current.destroy(); spriteRef.current = null; }
-      if (loadedSrcRef.current) { URL.revokeObjectURL(loadedSrcRef.current); loadedSrcRef.current = null; }
       if (!imageSrc) return;
-      // 使用 blobUrl 必须指定 parser 解析器，因为无法通过后缀名判断是哪种纹理
+      // 显式指定纹理解析器，确保自定义协议资源按图片纹理加载
       const texture: Texture = await Assets.load({
         src: imageSrc,
         parser: 'texture'
@@ -204,7 +201,6 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
       // 图片放入底图层最底部
       baseLayer.addChildAt(sprite, 0);
       spriteRef.current = sprite;
-      loadedSrcRef.current = imageSrc;
       fitToScreen();
     };
     load();

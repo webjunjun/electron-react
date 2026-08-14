@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- 配置CSP，允许加载自定义脚本和样式，以及 WebSocket 连接和数据加载 -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: blob: data:; img-src 'self' data: blob:; worker-src 'self' blob:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' app:; script-src 'self' 'unsafe-inline' app:; style-src 'self' 'unsafe-inline' app:; connect-src 'self' app: ws: blob: data:; img-src 'self' app: data: blob:; worker-src 'self' app: blob:;">
   <title>Electron React App</title>
 </head>
 <body>

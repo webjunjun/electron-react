@@ -142,7 +142,7 @@ const takeSnapshot = (s: {
 interface ImageEditorState {
   /** 当前加载的图片在磁盘上的路径。 */
   diskImageSrc: string | null;
-  /** 当前加载的图片在内存中的路径 blob 格式，方便后续操作。 */
+  /** 当前图片供渲染器加载的资源 URL（例如 app://local/...）。 */
   imageSrc: string | null;
   /** 加载的图片的原始像素尺寸。 */
   imageSize: ImageSize | null;
@@ -173,11 +173,11 @@ interface ImageEditorState {
   /** 历史记录：被撤销的快照栈（可重做）。 */
   future: EditorSnapshot[];
 
-  /** 加载新的图片，撤销之前的 ObjectURL 来避免内存泄漏。 */
-  setImage: (diskSrc: string, blobUrl: string, size: ImageSize) => void;
+  /** 加载新图片，记录磁盘路径、资源 URL 与原始尺寸。 */
+  setImage: (diskSrc: string, resourceUrl: string, size: ImageSize) => void;
   /** 更新显示的缩放比例（由画布调用）。 */
   setZoom: (zoom: number) => void;
-  /** 清除当前图片并撤销其 ObjectURL。 */
+  /** 清除当前图片及其编辑状态。 */
   reset: () => void;
 
   /** 新增一个标注对象。 */
@@ -222,7 +222,7 @@ interface ImageEditorState {
 
 export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
   diskImageSrc: null, // 图片在磁盘上的路径
-  imageSrc: null, // 图片在内存中的路径 blob 格式，方便后续操作
+  imageSrc: null, // 当前图片的资源 URL
   imageSize: null, // 图片的原始像素尺寸
   zoom: 1,
   annotations: [], // 所有标注对象
@@ -235,17 +235,12 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
   past: [], // 历史快照栈
   future: [], // 重做快照栈
 
-  setImage: (diskSrc, blobUrl, size) => {
-    const prev = get().imageSrc;
-    if (prev) {
-      // 先撤销之前的ObjectURL，避免内存泄漏
-      URL.revokeObjectURL(prev);
-    }
+  setImage: (diskSrc, resourceUrl, size) => {
     // 切换图片时清空标注与调色，并重置历史（新图是全新的基线）
     set({
       diskImageSrc: diskSrc,
       imageSize: size,
-      imageSrc: blobUrl,
+      imageSrc: resourceUrl,
       annotations: [],
       selectedId: null,
       adjustments: { ...DEFAULT_ADJUSTMENTS },
@@ -261,11 +256,6 @@ export const useImageEditorStore = create<ImageEditorState>((set, get) => ({
   setZoom: (zoom) => set({ zoom }),
 
   reset: () => {
-    const prev = get().imageSrc;
-    if (prev) {
-      // 先撤销之前的ObjectURL，避免内存泄漏
-      URL.revokeObjectURL(prev);
-    }
     set({
       diskImageSrc: null,
       imageSrc: null,
