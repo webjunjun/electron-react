@@ -5,7 +5,6 @@ import {
   registerAppProtocolSchemes,
   registerAppProtocolHandler,
 } from './handlers/protocol.js';
-import { registerOnnxHandlers } from './handlers/onnx.js';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -39,8 +38,6 @@ app.whenReady().then(() => {
   registerAppProtocolHandler(path.join(__dirname, '../renderer'));
   // 注册给渲染进程使用的方法
   registerFileHandlers(ipcMain);
-  // 注册 ONNX 处理方法
-  registerOnnxHandlers(ipcMain);
   
   createWindow();
 

@@ -69,24 +69,6 @@ function Ocr() {
     setImage(null);
   };
 
-  // 载入模型
-  const handleLoadModel = async () => {
-    const detSession = await window.electronAPI.loadModel(
-      '../../assets/ocr_lib/PP-OCRv6_tiny_det.onnx'
-    );
-    const recSession = await window.electronAPI.loadModel(
-      '../../assets/ocr_lib/PP-OCRv6_tiny_rec.onnx'
-    );
-    if (!detSession || !recSession) {
-      message.error('无法载入模型');
-      return;
-    }
-  };
-
-  useEffect(() => {
-    handleLoadModel();
-  }, []);
-
   return (
     <div className="ocr-page">
       {/* 顶部工具条 */}
