@@ -129,6 +129,11 @@ npm run typecheck
 
 使用 Zustand 单一 store（`imageEditorStore.ts`）。编辑状态（标注、调色、滤镜、马赛克、裁剪框）纳入快照式 undo/redo 历史，切换图片时清空并重置历史。
 
+### 包说明
+
+- **onnxruntime-node** - ONNX 模型推理（用于文字检测与识别等），非浏览器环境使用
+- **sharp** - 图片处理库（用于裁剪、调整大小等），非浏览器环境使用
+
 ## 环境要求
 
 - Node.js >= 18

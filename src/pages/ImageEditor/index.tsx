@@ -15,6 +15,7 @@ import {
   FilterOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons';
+import { LOCAL_FILE_PROTOCOL } from '../../constants';
 import EditorShell, { RailTool } from '../../components/EditorShell';
 import ImageCanvas, { ImageCanvasHandle } from '../../components/ImageCanvas';
 import { useImageEditorStore } from '../../store/imageEditorStore';
@@ -119,7 +120,7 @@ function ImageEditor() {
   // 生成图片的 URL 并设置到状态中：走 app://local 自定义协议直连本地文件，
   // 直接使用自定义协议 URL 加载磁盘图片，避免创建中间内存 URL
   const loadImageUrl = (path: string) => {
-    const url = `app://local/${encodeURI(path)}`;
+    const url = `${LOCAL_FILE_PROTOCOL}/${encodeURI(path)}`;
     const probe = new Image();
     probe.onload = () => {
       setImage(path, url, {
@@ -142,7 +143,7 @@ function ImageEditor() {
     loadImageUrl(calcPath);
   };
 
-  // 拖拽导入图片
+  // 鼠标拖拽释放导入图片
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];

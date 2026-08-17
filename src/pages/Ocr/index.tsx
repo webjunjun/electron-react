@@ -1,15 +1,91 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Space } from 'antd';
+import { Button, message, Space } from 'antd';
+import { LOCAL_FILE_PROTOCOL } from '../../constants';
 import {
   ArrowLeftOutlined,
   ScanOutlined,
   ImportOutlined,
   CopyOutlined,
   ExportOutlined,
+  DeleteOutlined,
+  InboxOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
+
+// PP-OCRv6_tiny_det.onnx: 文字检测模型，用于定位图片中的文字区域
+// 可检测手写体、印刷体、旋转、弯曲及艺术字体
+// NCHW: N个样本，C个通道，H高，W宽 float32（多个样本，3通道，高不限，宽不限）
+
+// PP-OCRv6_tiny_rec.onnx: 文字识别模型，用于识别文字区域中的字符
+// 可识别手写体、印刷体、旋转、弯曲及艺术字体中的字符，支持49种语言
+// NCHW: N个样本，C个通道，H高，W宽 float32（多个样本，3通道，高48像素，宽不限）
 
 function Ocr() {
   const navigate = useNavigate();
+  const [image, setImage] = useState<{ src: string; name: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const loadImage = (path: string, name: string) => {
+    setImage({
+      src: `${LOCAL_FILE_PROTOCOL}/${encodeURI(path.replace(/\\/g, '/'))}`,
+      name,
+    });
+  };
+
+  // 导入图片
+  const handleImport = async () => {
+    const result = await window.electronAPI.showOpenDialogSync({
+      filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
+      properties: ['openFile'],
+    });
+    const path = result?.[0];
+    if (!path) return;
+    loadImage(path, path.split(/[\\/]/).pop() ?? '图片');
+  };
+
+  // 鼠标拖拽释放导入图片
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      message.warning('请拖入图片文件');
+      return;
+    }
+
+    const path = (file as File & { path?: string }).path;
+    if (!path) {
+      message.error('无法读取图片路径');
+      return;
+    }
+    loadImage(path, file.name);
+  };
+
+  const handleClear = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setImage(null);
+  };
+
+  // 载入模型
+  const handleLoadModel = async () => {
+    const detSession = await window.electronAPI.loadModel(
+      '../../assets/ocr_lib/PP-OCRv6_tiny_det.onnx'
+    );
+    const recSession = await window.electronAPI.loadModel(
+      '../../assets/ocr_lib/PP-OCRv6_tiny_rec.onnx'
+    );
+    if (!detSession || !recSession) {
+      message.error('无法载入模型');
+      return;
+    }
+  };
+
+  useEffect(() => {
+    handleLoadModel();
+  }, []);
 
   return (
     <div className="ocr-page">
@@ -28,8 +104,10 @@ function Ocr() {
         </span>
         <div className="ocr-toolbar__spacer" />
         <Space>
-          <Button icon={<ImportOutlined />}>导入</Button>
-          <Button type="primary" icon={<ScanOutlined />} disabled>
+          <Button
+            icon={<ImportOutlined />}
+            onClick={handleImport}>导入</Button>
+          <Button type="primary" icon={<ScanOutlined />} disabled={!image}>
             开始识别
           </Button>
           <Button icon={<CopyOutlined />} disabled>
@@ -43,11 +121,53 @@ function Ocr() {
 
       {/* 双栏主体：左图右文 */}
       <div className="ocr-body">
-        <div className="ocr-preview">
-          <div className="ocr-preview__empty">
-            <ScanOutlined style={{ fontSize: 48, marginBottom: 12 }} />
-            <div>拖入图片或点击「导入」</div>
-          </div>
+        <div
+          className={`ocr-preview${isDragging ? ' ocr-preview--dragging' : ''}`}
+          onClick={!image ? handleImport : undefined}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+              setIsDragging(false);
+            }
+          }}
+          onDrop={handleDrop}
+        >
+          {image ? (
+            <>
+              <img
+                className="ocr-preview__image"
+                src={image.src}
+                alt={image.name}
+                // 禁用图片拖拽 避免冒泡到父容器绑定的拖拽事件
+                draggable={false}
+              />
+              <div className="ocr-preview__actions">
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={handleClear}
+                  aria-label="移除图片"
+                >
+                  移除图片
+                </Button>
+              </div>
+              {isDragging && (
+                <div className="ocr-preview__drop-mask">
+                  <InboxOutlined />
+                  <span>松开以更换图片</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="ocr-preview__empty">
+              <PictureOutlined style={{ fontSize: 48, marginBottom: 12 }} />
+              <div>{isDragging ? '松开以导入图片' : '拖入图片或点击此处导入'}</div>
+            </div>
+          )}
         </div>
 
         <div className="ocr-result">
@@ -62,8 +182,8 @@ function Ocr() {
 
       {/* 状态栏 */}
       <div className="ocr-status">
-        <span className="ocr-status__item">未打开图片</span>
-        <span className="ocr-status__item">状态：待识别</span>
+        <span className="ocr-status__item">{image?.name ?? '未打开图片'}</span>
+        <span className="ocr-status__item">状态：{image ? '待识别' : '等待导入'}</span>
         <span className="ocr-status__item">字符数：0</span>
       </div>
     </div>
