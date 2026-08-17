@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button, message, Space } from 'antd';
 import * as ort from 'onnxruntime-web';
 import detModelUrl from '../../assets/ocr_lib/PP-OCRv6_tiny_det.onnx?url';
+// 默认 bundle 使用 jsep 版 wasm 运行时；用 ?url 交给 Vite 打包并提供可访问路径
+import ortWasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url';
 import { LOCAL_FILE_PROTOCOL } from '../../constants';
 import {
   ArrowLeftOutlined,
@@ -35,13 +37,17 @@ function Ocr() {
 
     const loadDetModel = async () => {
       try {
-        const session = await ort.InferenceSession.create(detModelUrl, {
-          
-        });
+        // 指定 wasm 运行时文件路径，否则默认从 CDN/相对路径拉取会 404 导致加载失败
+        ort.env.wasm.wasmPaths = {
+          wasm: ortWasmUrl
+        }
+        ort.env.wasm.numThreads = 1;
+        const session = await ort.InferenceSession.create(detModelUrl);
         if (disposed) {
           await session.release();
           return;
         }
+        console.log(session);
         detSessionRef.current = session;
         setModelStatus('ready');
       } catch (error) {
