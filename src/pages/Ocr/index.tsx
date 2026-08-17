@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, message, Space } from 'antd';
+import * as ort from 'onnxruntime-web';
+import detModelUrl from '../../assets/ocr_lib/PP-OCRv6_tiny_det.onnx?url';
 import { LOCAL_FILE_PROTOCOL } from '../../constants';
 import {
   ArrowLeftOutlined,
@@ -25,6 +27,41 @@ function Ocr() {
   const navigate = useNavigate();
   const [image, setImage] = useState<{ src: string; name: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const detSessionRef = useRef<ort.InferenceSession | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const loadDetModel = async () => {
+      try {
+        const session = await ort.InferenceSession.create(detModelUrl, {
+          
+        });
+        if (disposed) {
+          await session.release();
+          return;
+        }
+        detSessionRef.current = session;
+        setModelStatus('ready');
+      } catch (error) {
+        console.error('加载 PP-OCRv6_tiny_det 模型失败', error);
+        if (!disposed) {
+          setModelStatus('error');
+          message.error('文本检测模型加载失败');
+        }
+      }
+    };
+
+    loadDetModel();
+
+    return () => {
+      disposed = true;
+      const session = detSessionRef.current;
+      detSessionRef.current = null;
+      void session?.release();
+    };
+  }, []);
 
   const loadImage = (path: string, name: string) => {
     setImage({
@@ -89,7 +126,12 @@ function Ocr() {
           <Button
             icon={<ImportOutlined />}
             onClick={handleImport}>导入</Button>
-          <Button type="primary" icon={<ScanOutlined />} disabled={!image}>
+          <Button
+            type="primary"
+            icon={<ScanOutlined />}
+            disabled={!image || modelStatus !== 'ready'}
+            loading={modelStatus === 'loading'}
+          >
             开始识别
           </Button>
           <Button icon={<CopyOutlined />} disabled>
@@ -165,7 +207,9 @@ function Ocr() {
       {/* 状态栏 */}
       <div className="ocr-status">
         <span className="ocr-status__item">{image?.name ?? '未打开图片'}</span>
-        <span className="ocr-status__item">状态：{image ? '待识别' : '等待导入'}</span>
+        <span className="ocr-status__item">
+          状态：{modelStatus === 'loading' ? '正在加载文本检测模型' : modelStatus === 'error' ? '文本检测模型加载失败' : image ? '待识别' : '等待导入'}
+        </span>
         <span className="ocr-status__item">字符数：0</span>
       </div>
     </div>
