@@ -37,10 +37,10 @@ const entries: EntryItem[] = [
   {
     key: 'ocr',
     title: '文字识别',
-    description: '从图片中扫描并提取文字（OCR）',
+    description: '从图片中扫描并提取文字(OCR)',
     path: '/ocr',
     icon: <ScanOutlined />,
-    color: '#13c2c2',
+    color: '#722ed1',
     enabled: true,
   },
 ];

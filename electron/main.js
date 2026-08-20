@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { registerFileHandlers } from './handlers/file.js';
+import { registerSharpImageHandlers } from './handlers/sharpImage.js';
 import {
   registerAppProtocolSchemes,
   registerAppProtocolHandler,
@@ -38,7 +39,8 @@ app.whenReady().then(() => {
   registerAppProtocolHandler(path.join(__dirname, '../renderer'));
   // 注册给渲染进程使用的方法
   registerFileHandlers(ipcMain);
-  
+  registerSharpImageHandlers(ipcMain);
+
   createWindow();
 
   app.on('activate', () => {

@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, message, Space } from 'antd';
 import * as ort from 'onnxruntime-web';
+// 用 ?url 交给 Vite 打包并提供可访问路径
 import detModelUrl from '../../assets/ocr_lib/PP-OCRv6_tiny_det.onnx?url';
-// 默认 bundle 使用 jsep 版 wasm 运行时；用 ?url 交给 Vite 打包并提供可访问路径
+import recModelUrl from '../../assets/ocr_lib/PP-OCRv6_tiny_rec.onnx?url';
+// 默认 bundle 使用 jsep 版 wasm 运行时
 import ortWasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url';
 import { LOCAL_FILE_PROTOCOL } from '../../constants';
 import {
@@ -16,6 +18,9 @@ import {
   InboxOutlined,
   PictureOutlined,
 } from '@ant-design/icons';
+import { buildDetInputTensor } from './detImage';
+import { dbPostProcess, type DetBox } from './dbPostProcess';
+import DetectionOverlay from './DetectionOverlay';
 
 // PP-OCRv6_tiny_det.onnx: 文字检测模型，用于定位图片中的文字区域
 // 可检测手写体、印刷体、旋转、弯曲及艺术字体
@@ -27,10 +32,13 @@ import {
 
 function Ocr() {
   const navigate = useNavigate();
-  const [image, setImage] = useState<{ src: string; name: string } | null>(null);
+  const [image, setImage] = useState<{ src: string; name: string; filePath: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const detSessionRef = useRef<ort.InferenceSession | null>(null);
+  const recSessionRef = useRef<ort.InferenceSession | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [boxes, setBoxes] = useState<DetBox[]>([]);
 
   useEffect(() => {
     let disposed = false;
@@ -42,23 +50,27 @@ function Ocr() {
           wasm: ortWasmUrl
         }
         ort.env.wasm.numThreads = 1;
-        const session = await ort.InferenceSession.create(detModelUrl);
+        const detSession = await ort.InferenceSession.create(detModelUrl);
+        const recSession = await ort.InferenceSession.create(recModelUrl);
         if (disposed) {
-          await session.release();
+          await detSession.release();
+          await recSession.release();
           return;
         }
-        console.log(session);
-        detSessionRef.current = session;
+        detSessionRef.current = detSession;
+        recSessionRef.current = recSession;
+        // 打印模型信息 了解模型输入输出信息
+        console.log('OCR模型加载成功', detSession, recSession);
         setModelStatus('ready');
       } catch (error) {
-        console.error('加载 PP-OCRv6_tiny_det 模型失败', error);
+        console.error('加载OCR模型失败', error);
         if (!disposed) {
           setModelStatus('error');
-          message.error('文本检测模型加载失败');
+          message.error('OCR模型加载失败');
         }
       }
     };
-
+    // 加载OCR模型
     loadDetModel();
 
     return () => {
@@ -69,10 +81,12 @@ function Ocr() {
     };
   }, []);
 
-  const loadImage = (path: string, name: string) => {
+  // 加载图片
+   const loadImage = (path: string, name: string) => {
     setImage({
       src: `${LOCAL_FILE_PROTOCOL}/${encodeURI(path.replace(/\\/g, '/'))}`,
       name,
+      filePath: path,
     });
   };
 
@@ -107,9 +121,74 @@ function Ocr() {
     loadImage(path, file.name);
   };
 
+  // 清除图片
   const handleClear = (event: React.MouseEvent) => {
     event.stopPropagation();
     setImage(null);
+  };
+
+  // 开始识别
+  const handleScan = async () => {
+    if (!image) {
+      message.warning('请先导入图片');
+      return;
+    }
+    if (modelStatus !== 'ready') {
+      message.warning('请先加载OCR模型');
+      return;
+    }
+    try {
+      // 调整图片尺寸 适合模型输入尺寸约束
+      // 直接用原始文件路径，避免协议 URL 的 encodeURI 编码问题
+      const resizedImage = await window.electronAPI.resizeImageDetOcr({
+        path: image.filePath,
+      });
+      if (!resizedImage?.success) {
+        message.error(resizedImage?.error || '调整图片尺寸失败');
+        return;
+      }
+      // 仅解构数据字段，剔除 success/error 等控制字段，并将可选字段收窄为必填
+      const {
+        data,
+        width,
+        height,
+        channels,
+        originalWidth,
+        originalHeight,
+        ratioW,
+        ratioH,
+      } = resizedImage;
+      // 调用 OCR 文本检测模型识别文字区域
+      const detTensor = buildDetInputTensor({
+        data, width, height, channels, originalWidth, originalHeight, ratioW, ratioH,
+      });
+      const detSession = detSessionRef.current;
+      if (!detSession) {
+        message.error('检测模型未就绪');
+        return;
+      }
+      // 推理：输入名取自模型（通常为 'x'），输出为概率图 [1,1,H,W]
+      const inputName = detSession.inputNames[0];
+      const outputName = detSession.outputNames[0];
+      const results = await detSession.run({ [inputName]: detTensor.tensor });
+      const outputTensor = results[outputName];
+      const pred = outputTensor.data as Float32Array;
+      const outDims = outputTensor.dims as number[]
+      const predH = outDims[2];
+      const predW = outDims[3];
+      // DBPostProcess：概率图 -> 文字框，并按 ratioW/ratioH 还原回原图坐标
+      const boxes = dbPostProcess(pred, predH, predW, ratioW, ratioH, {
+        thresh: 0.2,
+        box_thresh: 0.4,
+        unclip_ratio: 1.4,
+        max_candidates: 3000,
+      });
+      console.log('检测框数量:', boxes.length, boxes);
+      setBoxes(boxes);
+    } catch (error) {
+      message.error('识别失败');
+      return;
+    }
   };
 
   return (
@@ -137,6 +216,7 @@ function Ocr() {
             icon={<ScanOutlined />}
             disabled={!image || modelStatus !== 'ready'}
             loading={modelStatus === 'loading'}
+            onClick={handleScan}
           >
             开始识别
           </Button>
@@ -169,12 +249,14 @@ function Ocr() {
           {image ? (
             <>
               <img
+                ref={imgRef}
                 className="ocr-preview__image"
                 src={image.src}
                 alt={image.name}
                 // 禁用图片拖拽 避免冒泡到父容器绑定的拖拽事件
                 draggable={false}
               />
+              <DetectionOverlay boxes={boxes} imgRef={imgRef} />
               <div className="ocr-preview__actions">
                 <Button
                   danger
