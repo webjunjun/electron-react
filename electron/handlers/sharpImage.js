@@ -1,9 +1,140 @@
 import sharp from 'sharp';
+import fs from 'fs';
 
 // OCR 检测模型输入尺寸约束（来自 PP-OCRv6_tiny_det.yml dynamic shapes）：
 // 最小 32x32，最优 736x736，最大 4000x4000，尺寸需为 32 的倍数
 const DEFAULT_LIMIT_SIDE_LEN = 960;
 const DEFAULT_DIVISIBLE_BY = 32;
+
+// rec 识别模型输入尺寸（来自 PP-OCRv6_tiny_rec.yml：高固定 48，宽动态 dynamic_shapes [160,3200]）
+const REC_IMAGE_H = 48;
+const REC_IMAGE_MAX_W = 3200;
+
+// 透视变换辅助函数（手写实现，与 cv2.warpPerspective 数学等价，零依赖）
+// 对应 PaddleOCR 的 get_rotate_crop_image：根据 4 角点从原图透视裁剪并矫正为水平矩形
+
+// 将 4 个角点排序为 [左上, 右上, 右下, 左下]（按中心点象限划分，保证顺序稳定）
+function orderQuadPoints(pts) {
+  const cx = (pts[0][0] + pts[1][0] + pts[2][0] + pts[3][0]) / 4;
+  const cy = (pts[0][1] + pts[1][1] + pts[2][1] + pts[3][1]) / 4;
+  let tl = null, tr = null, br = null, bl = null;
+  for (const p of pts) {
+    const [x, y] = p;
+    if (x < cx && y < cy) tl = tl || p;
+    else if (x >= cx && y < cy) tr = tr || p;
+    else if (x >= cx && y >= cy) br = br || p;
+    else bl = bl || p;
+  }
+  // 退化情况兜底：取 pts 原顺序
+  return [tl || pts[0], tr || pts[1], br || pts[2], bl || pts[3]];
+}
+
+// 解 8x8 线性方程组 A·x = b（Gauss-Jordan 消元，带部分主元）
+function solveLinearSystem(A, b) {
+  const n = b.length;
+  // 增广矩阵 M = [A | b]
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    // 选主元
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    }
+    if (pivot !== col) {
+      const tmp = M[col];
+      M[col] = M[pivot];
+      M[pivot] = tmp;
+    }
+    if (Math.abs(M[col][col]) < 1e-12) return null; // 奇异矩阵
+    // 归一化主元行
+    const diag = M[col][col];
+    for (let c = col; c <= n; c++) M[col][c] /= diag;
+    // 消去其他行
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col];
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map(row => row[n]);
+}
+
+// 求 dst->src 的 3x3 透视矩阵（返回 [a,b,c,d,e,f,g,h,1]，行主序）
+// 使得对目标点 (xd,yd)，源点坐标为：
+//   xs = (a·xd + b·yd + c) / (g·xd + h·yd + 1)
+//   ys = (d·xd + e·yd + f) / (g·xd + h·yd + 1)
+function getDstToSrcMatrix(dstQuad, srcQuad) {
+  const A = [];
+  const b = [];
+  for (let i = 0; i < 4; i++) {
+    const [xd, yd] = dstQuad[i];
+    const [xs, ys] = srcQuad[i];
+    A.push([xd, yd, 1, 0, 0, 0, -xd * xs, -yd * xs]);
+    b.push(xs);
+    A.push([0, 0, 0, xd, yd, 1, -xd * ys, -yd * ys]);
+    b.push(ys);
+  }
+  const sol = solveLinearSystem(A, b);
+  if (!sol) return null;
+  return [sol[0], sol[1], sol[2], sol[3], sol[4], sol[5], sol[6], sol[7], 1];
+}
+
+// 双线性插值采样（边界外填 0）
+function bilinearSample(data, w, h, x, y, out, outOff) {
+  if (x < 0 || y < 0 || x > w - 1 || y > h - 1) {
+    out[outOff] = 0;
+    out[outOff + 1] = 0;
+    out[outOff + 2] = 0;
+    return;
+  }
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const x1 = Math.min(x0 + 1, w - 1), y1 = Math.min(y0 + 1, h - 1);
+  const dx = x - x0, dy = y - y0;
+  const i00 = (y0 * w + x0) * 3;
+  const i01 = (y0 * w + x1) * 3;
+  const i10 = (y1 * w + x0) * 3;
+  const i11 = (y1 * w + x1) * 3;
+  const w00 = (1 - dx) * (1 - dy);
+  const w01 = dx * (1 - dy);
+  const w10 = (1 - dx) * dy;
+  const w11 = dx * dy;
+  for (let c = 0; c < 3; c++) {
+    out[outOff + c] = Math.round(
+      data[i00 + c] * w00 + data[i01 + c] * w01 + data[i10 + c] * w10 + data[i11 + c] * w11
+    );
+  }
+}
+
+// 透视重采样：对目标矩形每像素用 dst->src 矩阵映射回源图，双线性采样
+function warpPerspective(srcData, srcW, srcH, dstW, dstH, m) {
+  const dstData = Buffer.alloc(dstW * dstH * 3);
+  const [a, b, c, d, e, f, g, h] = m;
+  for (let y = 0; y < dstH; y++) {
+    const rowOff = y * dstW;
+    for (let x = 0; x < dstW; x++) {
+      const wDen = g * x + h * y + 1;
+      const xs = (a * x + b * y + c) / wDen;
+      const ys = (d * x + e * y + f) / wDen;
+      bilinearSample(srcData, srcW, srcH, xs, ys, dstData, (rowOff + x) * 3);
+    }
+  }
+  return dstData;
+}
+
+// 双线性 resize（半像素中心对齐，与 cv2.resize INTER_LINEAR 一致）
+function resizeBilinear(srcData, srcW, srcH, dstW, dstH) {
+  const dstData = Buffer.alloc(dstW * dstH * 3);
+  const xRatio = srcW / dstW;
+  const yRatio = srcH / dstH;
+  for (let y = 0; y < dstH; y++) {
+    const sy = (y + 0.5) * yRatio - 0.5;
+    for (let x = 0; x < dstW; x++) {
+      const sx = (x + 0.5) * xRatio - 0.5;
+      bilinearSample(srcData, srcW, srcH, sx, sy, dstData, (y * dstW + x) * 3);
+    }
+  }
+  return dstData;
+}
 
 export const registerSharpImageHandlers = (ipcMain) => {
   // 调整图片尺寸：保持宽高比，限制最长边，并对齐到 divisibleBy 的倍数
@@ -59,6 +190,72 @@ export const registerSharpImageHandlers = (ipcMain) => {
       };
     } catch (error) {
       console.error('[sharpImage] resizeImageDetOcr failed:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // 透视裁剪文字条并 resize 到 rec 输入尺寸：根据检测框 4 角点从原图透视裁剪，
+  // 再 RecResizeImg（保持宽高比 resize 到高 48，右侧 pad 0 到宽 320），
+  // 对应 PaddleOCR 的 get_rotate_crop_image + RecResizeImg，输出 RGB HWC 像素供 rec 模型预处理
+  ipcMain.handle('sharp:cropTextRegion', async (_event, { path, quad } = {}) => {
+    try {
+      if (!path) return { success: false, error: '缺少图片路径' };
+      if (!quad || quad.length !== 4) return { success: false, error: 'quad 需要 4 个角点' };
+
+      // 读取原图 RGB HWC 像素
+      const { data, info } = await sharp(path)
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const srcW = info.width;
+      const srcH = info.height;
+
+      // 排序角点为 [左上, 右上, 右下, 左下]
+      const srcQuad = orderQuadPoints(quad);
+
+      // 计算裁剪图原尺寸（与 PaddleOCR get_rotate_crop_image 一致）
+      // 宽 = max(上边长, 下边长)，高 = max(左边长, 右边长)
+      const dist = (p1, p2) => Math.hypot(p1[0] - p2[0], p1[1] - p2[1]);
+      const W = Math.round(Math.max(dist(srcQuad[0], srcQuad[1]), dist(srcQuad[2], srcQuad[3])));
+      const H = Math.round(Math.max(dist(srcQuad[0], srcQuad[3]), dist(srcQuad[1], srcQuad[2])));
+      if (W < 1 || H < 1) return { success: false, error: '裁剪区域过小' };
+
+      // 透视重采样得到裁剪图（原尺寸 W×H，RGB HWC）
+      const dstQuad = [[0, 0], [W, 0], [W, H], [0, H]];
+      const m = getDstToSrcMatrix(dstQuad, srcQuad);
+      if (!m) return { success: false, error: '透视矩阵求解失败（4 点共线）' };
+      const cropped = warpPerspective(data, srcW, srcH, W, H, m);
+
+      // RecResizeImg：保持宽高比 resize 到高 REC_IMAGE_H，宽按原比例（动态宽度，不 pad）
+      // 模型支持动态宽度 dynamic_shapes [160,3200]，长文字行不被压缩，保精度
+      const ratio = W / H;
+      let resW = Math.round(REC_IMAGE_H * ratio);
+      if (resW > REC_IMAGE_MAX_W) resW = REC_IMAGE_MAX_W;
+      if (resW < 1) resW = 1;
+      const resized = resizeBilinear(cropped, W, H, resW, REC_IMAGE_H);
+
+      // 临时调试：保存裁剪图为 PNG，肉眼验证图像内容（定位第1框识别为空问题）
+      try {
+        const debugDir = path.join(process.cwd(), 'temp/ocr_debug');
+        if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
+        const debugPath = path.join(debugDir, `crop_${Date.now()}_${resW}x${REC_IMAGE_H}.png`);
+        await sharp(resized, { raw: { width: resW, height: REC_IMAGE_H, channels: 3 } })
+          .png()
+          .toFile(debugPath);
+        console.log('[cropTextRegion] debug saved:', debugPath);
+      } catch (e) {
+        console.error('[cropTextRegion] debug save failed:', e);
+      }
+
+      return {
+        success: true,
+        data: resized, // Buffer: rec 输入图像，48×resW RGB HWC，动态宽度不 pad
+        width: resW,
+        height: REC_IMAGE_H,
+        channels: 3,
+      };
+    } catch (error) {
+      console.error('[sharpImage] cropTextRegion failed:', error);
       return { success: false, error: String(error) };
     }
   });

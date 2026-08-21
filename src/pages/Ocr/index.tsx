@@ -20,6 +20,8 @@ import {
 } from '@ant-design/icons';
 import { buildDetInputTensor } from './detImage';
 import { dbPostProcess, type DetBox } from './dbPostProcess';
+import { buildRecTensors, type RecCrop } from './recImage';
+import { ctcDecode } from './ctcDecode';
 import DetectionOverlay from './DetectionOverlay';
 
 // PP-OCRv6_tiny_det.onnx: 文字检测模型，用于定位图片中的文字区域
@@ -39,6 +41,8 @@ function Ocr() {
   const recSessionRef = useRef<ort.InferenceSession | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [boxes, setBoxes] = useState<DetBox[]>([]);
+  const [text, setText] = useState('');
+  const [charCount, setCharCount] = useState(0);
 
   useEffect(() => {
     let disposed = false;
@@ -185,7 +189,60 @@ function Ocr() {
       });
       console.log('检测框数量:', boxes.length, boxes);
       setBoxes(boxes);
+
+      // ===== rec 文字识别 =====
+      const recSession = recSessionRef.current;
+      if (!recSession || boxes.length === 0) return;
+
+      // 1. 逐框透视裁剪 + RecResizeImg（主进程返回 48×resW RGB HWC，动态宽度）
+      const cropResults = await Promise.all(
+        boxes.map((b) =>
+          window.electronAPI.cropTextRegion({
+            path: image.filePath,
+            quad: b.points,
+          })
+        )
+      );
+      const crops: RecCrop[] = [];
+      for (const r of cropResults) {
+        if (!r || !r.success) {
+          console.error('[rec] 裁剪失败:', r?.error);
+          continue;
+        }
+        crops.push({ data: r.data, width: r.width, height: r.height, channels: r.channels });
+      }
+      if (crops.length === 0) {
+        message.warning('无有效文字条');
+        return;
+      }
+
+      // 2. 分组 batch（按宽度排序，组内用最大宽度 pad 0）
+      const batches = buildRecTensors(crops);
+      console.log('[rec] batches:', batches.length, batches.map((b) => b.tensor.dims));
+
+      // 3. 逐 batch 推理
+      const recInputName = recSession.inputNames[0];
+      const recOutputName = recSession.outputNames[0];
+      const recOutputs: { indices: number[]; tensor: ort.Tensor }[] = [];
+      for (const batch of batches) {
+        const out = await recSession.run({ [recInputName]: batch.tensor });
+        recOutputs.push({ indices: batch.indices, tensor: out[recOutputName] });
+      }
+
+      // 4. CTC 解码，按 batch.indices 回填到原顺序
+      const texts = new Array<string>(crops.length).fill('');
+      for (const o of recOutputs) {
+        const decoded = ctcDecode(o.tensor);
+        console.log('[rec] output dims:', o.tensor.dims, 'decoded:', decoded);
+        for (let i = 0; i < o.indices.length; i++) {
+          texts[o.indices[i]] = decoded[i]?.text ?? '';
+        }
+      }
+      const allText = texts.join('\n');
+      setText(allText);
+      setCharCount(allText.replace(/\n/g, '').length);
     } catch (error) {
+      console.error('[det | rec] 识别失败:', error);
       message.error('识别失败');
       return;
     }
@@ -287,6 +344,7 @@ function Ocr() {
           <textarea
             className="ocr-result__text"
             placeholder="识别结果将显示在这里，可手动修正…"
+            value={text}
             readOnly
           />
         </div>
@@ -298,7 +356,7 @@ function Ocr() {
         <span className="ocr-status__item">
           状态：{modelStatus === 'loading' ? '正在加载文本检测模型' : modelStatus === 'error' ? '文本检测模型加载失败' : image ? '待识别' : '等待导入'}
         </span>
-        <span className="ocr-status__item">字符数：0</span>
+        <span className="ocr-status__item">字符数：{charCount}</span>
       </div>
     </div>
   );

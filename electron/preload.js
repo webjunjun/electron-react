@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveImage: (options) => ipcRenderer.invoke('saveImage', options),
   // 使用 sharp 调整输入的图片尺寸，适合 OCR 检测模型输入尺寸约束
   resizeImageDetOcr: (options) => ipcRenderer.invoke('sharp:resizeImageDetOcr', options),
+  // 透视裁剪文字条：根据检测框 4 角点从原图透视裁剪并矫正为水平矩形
+  cropTextRegion: (options) => ipcRenderer.invoke('sharp:cropTextRegion', options),
 });
