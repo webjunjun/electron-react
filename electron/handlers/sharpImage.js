@@ -1,14 +1,13 @@
 import sharp from 'sharp';
-import fs from 'fs';
 
 // OCR 检测模型输入尺寸约束（来自 PP-OCRv6_tiny_det.yml dynamic shapes）：
 // 最小 32x32，最优 736x736，最大 4000x4000，尺寸需为 32 的倍数
 const DEFAULT_LIMIT_SIDE_LEN = 960;
 const DEFAULT_DIVISIBLE_BY = 32;
 
-// rec 识别模型输入尺寸（来自 PP-OCRv6_tiny_rec.yml：高固定 48，宽动态 dynamic_shapes [160,3200]）
+// rec 识别模型输入尺寸（来自 PP-OCRv6_tiny_rec.yml：高固定 48，训练时宽固定 320）
 const REC_IMAGE_H = 48;
-const REC_IMAGE_MAX_W = 3200;
+const REC_IMAGE_W = 320;
 
 // 透视变换辅助函数（手写实现，与 cv2.warpPerspective 数学等价，零依赖）
 // 对应 PaddleOCR 的 get_rotate_crop_image：根据 4 角点从原图透视裁剪并矫正为水平矩形
@@ -226,31 +225,37 @@ export const registerSharpImageHandlers = (ipcMain) => {
       if (!m) return { success: false, error: '透视矩阵求解失败（4 点共线）' };
       const cropped = warpPerspective(data, srcW, srcH, W, H, m);
 
-      // RecResizeImg：保持宽高比 resize 到高 REC_IMAGE_H，宽按原比例（动态宽度，不 pad）
-      // 模型支持动态宽度 dynamic_shapes [160,3200]，长文字行不被压缩，保精度
+      // RecResizeImg（对齐 PaddleOCR 训练配置）：
+      //   1. 保持宽高比 resize 到高 48（sharp 内置插值，质量优于手写 bilinear）
+      //   2. 宽 > 320 时缩小到 320；宽 <= 320 时右侧 pad 0 到 320
+      //   模型训练时用固定 320 宽度，动态宽度支持是为灵活推理，实际应对齐训练配置
       const ratio = W / H;
       let resW = Math.round(REC_IMAGE_H * ratio);
-      if (resW > REC_IMAGE_MAX_W) resW = REC_IMAGE_MAX_W;
+      if (resW > REC_IMAGE_W) resW = REC_IMAGE_W;
       if (resW < 1) resW = 1;
-      const resized = resizeBilinear(cropped, W, H, resW, REC_IMAGE_H);
 
-      // 临时调试：保存裁剪图为 PNG，肉眼验证图像内容（定位第1框识别为空问题）
-      try {
-        const debugDir = path.join(process.cwd(), 'temp/ocr_debug');
-        if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
-        const debugPath = path.join(debugDir, `crop_${Date.now()}_${resW}x${REC_IMAGE_H}.png`);
-        await sharp(resized, { raw: { width: resW, height: REC_IMAGE_H, channels: 3 } })
-          .png()
-          .toFile(debugPath);
-        console.log('[cropTextRegion] debug saved:', debugPath);
-      } catch (e) {
-        console.error('[cropTextRegion] debug save failed:', e);
+      // 用 sharp 做高质量 resize（Lanczos 插值，与 cv2.INTER_LINEAR 接近但更优）
+      const { data: resizedRaw } = await sharp(cropped, {
+        raw: { width: W, height: H, channels: 3 },
+      })
+        .resize(resW, REC_IMAGE_H, { fit: 'fill', kernel: 'lanczos3' })
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      // pad 到 320 宽度（右侧补 0）
+      const finalData = Buffer.alloc(REC_IMAGE_W * REC_IMAGE_H * 3);
+      for (let y = 0; y < REC_IMAGE_H; y++) {
+        const srcOff = y * resW * 3;
+        const dstOff = y * REC_IMAGE_W * 3;
+        for (let x = 0; x < resW * 3; x++) {
+          finalData[dstOff + x] = resizedRaw[srcOff + x];
+        }
       }
 
       return {
         success: true,
-        data: resized, // Buffer: rec 输入图像，48×resW RGB HWC，动态宽度不 pad
-        width: resW,
+        data: finalData, // Buffer: rec 输入图像，48×320 RGB HWC，右侧 pad 0
+        width: REC_IMAGE_W,
         height: REC_IMAGE_H,
         channels: 3,
       };
