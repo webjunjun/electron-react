@@ -248,6 +248,28 @@ function Ocr() {
     }
   };
 
+  // 复制
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      message.success('已复制到剪贴板');
+    }).catch(() => {
+      message.error('复制失败');
+    });
+  };
+
+  // 导出 TXT
+  const handleExportTxt = async () => {
+    const result = await window.electronAPI.saveText({
+      content: text,
+      defaultFileName: `OCR结果_${new Date().toISOString().slice(0, 10)}.txt`,
+    });
+    if (result.saved) {
+      message.success('导出成功');
+    } else if (result.error) {
+      message.error('导出失败: ' + result.error);
+    }
+  };
+
   return (
     <div className="ocr-page">
       {/* 顶部工具条 */}
@@ -277,10 +299,18 @@ function Ocr() {
           >
             开始识别
           </Button>
-          <Button icon={<CopyOutlined />} disabled>
+          <Button
+            icon={<CopyOutlined />}
+            disabled={!text}
+            onClick={handleCopy}
+          >
             复制
           </Button>
-          <Button icon={<ExportOutlined />} disabled>
+          <Button
+            icon={<ExportOutlined />}
+            disabled={!text}
+            onClick={handleExportTxt}
+          >
             导出 TXT
           </Button>
         </Space>

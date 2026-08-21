@@ -36,4 +36,19 @@ export const registerFileHandlers = (ipcMain) => {
       return { saved: false, error: String(error) };
     }
   });
+  // 注册保存文本：弹出另存为对话框并写入 TXT
+  ipcMain.handle('saveText', async (_event, { content, defaultFileName = 'export.txt' }) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出文本',
+      defaultPath: defaultFileName,
+      filters: [{ name: '文本文件', extensions: ['txt'] }],
+    });
+    if (canceled || !filePath) return { saved: false };
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8');
+      return { saved: true, filePath };
+    } catch (error) {
+      return { saved: false, error: String(error) };
+    }
+  });
 }

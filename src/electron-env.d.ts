@@ -10,6 +10,10 @@ export interface ElectronAPI {
     base64: string,
     defaultFileName?: string
   }) => Promise<{ saved: boolean; filePath?: string; error?: string }>,
+  saveText: (options: {
+    content: string,
+    defaultFileName?: string
+  }) => Promise<{ saved: boolean; filePath?: string; error?: string }>,
   // 使用 sharp 调整输入的图片尺寸，适合 OCR 检测模型输入尺寸约束，返回原始 RGB 像素数据及尺寸/比例信息
   resizeImageDetOcr: (options: {
     path: string;
