@@ -24,13 +24,10 @@ import { buildRecTensors, type RecCrop } from './recImage';
 import { ctcDecode } from './ctcDecode';
 import DetectionOverlay from './DetectionOverlay';
 
-// PP-OCRv6_tiny_det.onnx: 文字检测模型，用于定位图片中的文字区域
-// 可检测手写体、印刷体、旋转、弯曲及艺术字体
-// NCHW: N个样本，C个通道，H高，W宽 float32（多个样本，3通道，高不限，宽不限）
-
-// PP-OCRv6_tiny_rec.onnx: 文字识别模型，用于识别文字区域中的字符
-// 可识别手写体、印刷体、旋转、弯曲及艺术字体中的字符，支持49种语言
-// NCHW: N个样本，C个通道，H高，W宽 float32（多个样本，3通道，高48像素，宽不限）
+// OCR 识别流水线：PP-OCRv6_tiny_det + PP-OCRv6_tiny_rec
+//   det（检测）：输入图片 NCHW float32，输出文字框概率图 → dbPostProcess 还原为原图 4 角点坐标
+//   rec（识别）：将每个检测框透视裁剪 + RecResizeImg 到 3×48×320（固定宽度对齐训练），批推理后 CTC 解码为文本
+//   字符集：6904 汉字/符号 + blank(索引0) + space(索引6905)，共 6906 类
 
 function Ocr() {
   const navigate = useNavigate();
@@ -194,7 +191,7 @@ function Ocr() {
       const recSession = recSessionRef.current;
       if (!recSession || boxes.length === 0) return;
 
-      // 1. 逐框透视裁剪 + RecResizeImg（主进程返回 48×resW RGB HWC，动态宽度）
+      // 1. 逐框透视裁剪 + RecResizeImg（主进程：透视变换矫正 → sharp resize 到 高48 → pad 到 宽320）
       const cropResults = await Promise.all(
         boxes.map((b) =>
           window.electronAPI.cropTextRegion({
@@ -216,7 +213,7 @@ function Ocr() {
         return;
       }
 
-      // 2. 分组 batch（按宽度排序，组内用最大宽度 pad 0）
+      // 2. 固定 320 宽度，直接按 batchSize 分组（无需排序/pad）
       const batches = buildRecTensors(crops);
       console.log('[rec] batches:', batches.length, batches.map((b) => b.tensor.dims));
 
@@ -229,7 +226,7 @@ function Ocr() {
         recOutputs.push({ indices: batch.indices, tensor: out[recOutputName] });
       }
 
-      // 4. CTC 解码，按 batch.indices 回填到原顺序
+      // 4. CTC 解码，按 batch.indices 回填到原顺序，框之间用 \n 拼接
       const texts = new Array<string>(crops.length).fill('');
       for (const o of recOutputs) {
         const decoded = ctcDecode(o.tensor);

@@ -5,7 +5,9 @@ import sharp from 'sharp';
 const DEFAULT_LIMIT_SIDE_LEN = 960;
 const DEFAULT_DIVISIBLE_BY = 32;
 
-// rec 识别模型输入尺寸（来自 PP-OCRv6_tiny_rec.yml：高固定 48，训练时宽固定 320）
+// rec 识别模型输入尺寸
+//   PP-OCRv6_tiny_rec.yml 训练配置 image_shape: [3, 48, 320]
+//   dynamic_shapes 范围 [1,3,48,160] ~ [8,3,48,3200] 仅为 ONNX 推理灵活性，实际推理应对齐训练宽度
 const REC_IMAGE_H = 48;
 const REC_IMAGE_W = 320;
 

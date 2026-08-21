@@ -2,8 +2,12 @@ import * as ort from 'onnxruntime-web';
 
 // PP-OCRv6_tiny_rec.yml PreProcess 配置：
 //   DecodeImage(img_mode: BGR) -> RecResizeImg([3,48,320]) -> KeepKeys(image)
-//   模型训练时固定 320 宽度，推理时对齐训练配置，所有 crop pad 到 320
-// 归一化：PP-OCRv6 rec 模型内部已包含归一化，这里直接用 0-255 原始像素（与 PaddleOCR 官方实现一致）
+//   RecResizeImg：保持宽高比 resize 到高48，宽<=320 时右侧 pad 0 到 320；宽>320 时等比缩到 320
+//   训练时 image_shape 固定为 [3,48,320]，推理时宽度对齐训练配置，避免泛化偏差
+// 预处理缩放：仅做 0-1 归一化（除以255）和 BGR 通道转换；
+//   注意：PP-OCR rec 的 yml 里不显式配置 NormalizeImage，
+//   这表示后续推理流程（PaddleOCR）内部会对 rec 输入做 0-1 缩放到模型期望输入范围。
+//   此处与 PaddleOCR 实际 rec 预处理保持一致：不做 ImageNet mean/std 归一化（与 det 不同）
 const SCALE = 1 / 255;
 
 export interface RecCrop {
@@ -53,7 +57,7 @@ export function buildRecTensors(crops: RecCrop[], batchSize = 8): RecBatch[] {
           const inRowOff = y * W * C;
           const outRowOff = outOff + y * W;
           for (let x = 0; x < W; x++) {
-            // 模型内部已归一化，这里只做 0-1 缩放 + BGR 通道转换
+            // 0-1 缩放 + BGR 通道转换（与 det 不同，rec 不应用 ImageNet mean/std）
             tensorData[outRowOff + x] = data[inBase + inRowOff + x * C] * SCALE;
           }
         }
