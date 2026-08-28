@@ -1,4 +1,4 @@
-import { Button, Segmented, Space, Typography } from 'antd';
+import { Button, Select, Space, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useImageEditorStore } from '../../store/imageEditorStore';
 
@@ -6,11 +6,14 @@ const { Text } = Typography;
 
 /** 比例预设。value 为字符串键，free=自由，orig=原图比例，其余为 w:h。 */
 const RATIO_OPTIONS = [
-  { label: '自由', value: 'free' },
-  { label: '1:1', value: '1:1' },
-  { label: '4:3', value: '4:3' },
-  { label: '16:9', value: '16:9' },
+  { label: '自定义', value: 'free' },
   { label: '原图', value: 'orig' },
+  { label: '正方形', value: '1:1' },
+  { label: '宽屏 - 16:9', value: '16:9' },
+  { label: '3:2', value: '3:2' },
+  { label: '4:3', value: '4:3' },
+  { label: '7:5', value: '7:5' },
+  { label: '10:8', value: '10:8' },
 ];
 
 /** 裁剪工具的属性面板：比例预设 + 尺寸显示 + 重置画框。 */
@@ -31,6 +34,9 @@ function CropToolPanel() {
     if (Math.abs(cropRatio - 1) < 1e-3) return '1:1';
     if (Math.abs(cropRatio - 4 / 3) < 1e-3) return '4:3';
     if (Math.abs(cropRatio - 16 / 9) < 1e-3) return '16:9';
+    if (Math.abs(cropRatio - 3 / 2) < 1e-3) return '3:2';
+    if (Math.abs(cropRatio - 7 / 5) < 1e-3) return '7:5';
+    if (Math.abs(cropRatio - 10 / 8) < 1e-3) return '10:8';
     return 'free';
   })();
 
@@ -50,6 +56,15 @@ function CropToolPanel() {
       case '16:9':
         setCropRatio(16 / 9);
         break;
+      case '3:2':
+        setCropRatio(3 / 2);
+        break;
+      case '7:5':
+        setCropRatio(7 / 5);
+        break;
+      case '10:8':
+        setCropRatio(10 / 8);
+        break;
       case 'orig':
         if (imageSize) setCropRatio(imageSize.width / imageSize.height);
         break;
@@ -66,15 +81,20 @@ function CropToolPanel() {
 
         <div>
           <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
-            比例
+            纵横比
           </Text>
-          <Segmented
-            block
-            value={currentValue}
+          <Select
+            style={{ width: '100%' }}
             disabled={disabled}
-            onChange={(v) => handleRatioChange(v as string)}
-            options={RATIO_OPTIONS}
-          />
+            defaultValue={currentValue}
+            onChange={handleRatioChange}
+          >
+            {RATIO_OPTIONS.map((item) => (
+              <Select.Option key={item.value} value={item.value}>
+                {item.label}
+              </Select.Option>
+            ))}
+          </Select>
         </div>
 
         <div>

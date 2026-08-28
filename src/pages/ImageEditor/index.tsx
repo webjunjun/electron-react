@@ -170,7 +170,7 @@ function ImageEditor() {
         disabled={!imageSrc}
         onClick={() => canvasRef.current?.actualSize()}
       >
-        100%
+        实际大小
       </Button>
       <Button
         type="text"
