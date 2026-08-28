@@ -7,6 +7,7 @@ import { useImageEditorStore } from '../../store/imageEditorStore';
 import useCanvasInteraction from './useCanvasInteraction';
 import useTextTool, { DefaultTextStyle } from './useTextTool';
 import useBrushTool, { DefaultBrushStyle } from './useBrushTool';
+import useShapeTool, { DefaultShapeStyle } from './useShapeTool';
 import useAdjustments from './useAdjustments';
 import useFilter from './useFilter';
 import useMosaicTool, { DefaultMosaicStyle } from './useMosaicTool';
@@ -29,6 +30,8 @@ interface ImageCanvasProps {
   defaultTextStyle: DefaultTextStyle;
   /** 新建笔迹时的默认样式。 */
   defaultBrushStyle: DefaultBrushStyle;
+  /** 新建形状时的默认样式。 */
+  defaultShapeStyle: DefaultShapeStyle;
   /** 新建马赛克/模糊区域时的默认参数。 */
   defaultMosaicStyle: DefaultMosaicStyle;
 }
@@ -39,6 +42,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
   activeTool,
   defaultTextStyle,
   defaultBrushStyle,
+  defaultShapeStyle,
   defaultMosaicStyle
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,6 +64,8 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
   useTextTool({ appRef, worldRef, annotationLayerRef, spriteRef, activeTool, ready, defaultStyle: defaultTextStyle });
   // 笔迹工具
   useBrushTool({ appRef, worldRef, annotationLayerRef, spriteRef, activeTool, ready, defaultStyle: defaultBrushStyle });
+  // 形状工具
+  useShapeTool({ appRef, worldRef, annotationLayerRef, spriteRef, activeTool, ready, defaultStyle: defaultShapeStyle });
   // 调整工具
   useAdjustments({ spriteRef, ready, imageSrc });
   // 滤镜工具

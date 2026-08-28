@@ -14,6 +14,7 @@ import {
   CompressOutlined,
   FilterOutlined,
   AppstoreOutlined,
+  BorderOutlined,
 } from '@ant-design/icons';
 import { LOCAL_FILE_PROTOCOL } from '../../constants';
 import EditorShell, { RailTool } from '../../components/EditorShell';
@@ -27,6 +28,7 @@ import BrushToolPanel, { DefaultBrushStyle } from './BrushToolPanel';
 import MosaicToolPanel from './MosaicToolPanel';
 import { DefaultMosaicStyle } from '../../components/ImageCanvas/useMosaicTool';
 import FilterToolPanel from './FilterToolPanel';
+import ShapeToolPanel, { DefaultShapeStyle } from './ShapeToolPanel';
 
 const tools: RailTool[] = [
   { key: 'move', label: '移动', icon: <DragOutlined /> },
@@ -34,6 +36,7 @@ const tools: RailTool[] = [
   { key: 'adjust', label: '调色', icon: <BgColorsOutlined /> },
   { key: 'text', label: '文字', icon: <FontSizeOutlined /> },
   { key: 'brush', label: '画笔', icon: <HighlightOutlined /> },
+  { key: 'shape', label: '形状', icon: <BorderOutlined /> },
   { key: 'mosaic', label: '马赛克', icon: <AppstoreOutlined /> },
   { key: 'filter', label: '滤镜', icon: <FilterOutlined /> },
 ];
@@ -61,6 +64,13 @@ function ImageEditor() {
   const [defaultMosaicStyle, setDefaultMosaicStyle] = useState<DefaultMosaicStyle>({
     mode: 'mosaic',
     strength: 15,
+  });
+
+  const [defaultShapeStyle, setDefaultShapeStyle] = useState<DefaultShapeStyle>({
+    shape: 'rect',
+    size: 4,
+    color: '#ff4d4f',
+    fill: false,
   });
 
   const imageSrc = useImageEditorStore((s) => s.imageSrc);
@@ -241,6 +251,15 @@ function ImageEditor() {
         );
       case 'filter':
         return <FilterToolPanel />;
+      case 'shape':
+        return (
+          <ShapeToolPanel
+            defaultStyle={defaultShapeStyle}
+            onDefaultStyleChange={(patch) =>
+              setDefaultShapeStyle((s) => ({ ...s, ...patch }))
+            }
+          />
+        );
       default:
         return null;
     }
@@ -277,6 +296,7 @@ function ImageEditor() {
           activeTool={activeTool}
           defaultTextStyle={defaultTextStyle}
           defaultBrushStyle={defaultBrushStyle}
+          defaultShapeStyle={defaultShapeStyle}
           defaultMosaicStyle={defaultMosaicStyle}
         />
         {!imageSrc && (
