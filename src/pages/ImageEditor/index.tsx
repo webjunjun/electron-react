@@ -77,6 +77,7 @@ function ImageEditor() {
   const imageSize = useImageEditorStore((s) => s.imageSize);
   const zoom = useImageEditorStore((s) => s.zoom);
   const setImage = useImageEditorStore((s) => s.setImage);
+  const reset = useImageEditorStore((s) => s.reset);
   const annotations = useImageEditorStore((s) => s.annotations);
   const selectedId = useImageEditorStore((s) => s.selectedId);
   const updateAnnotation = useImageEditorStore((s) => s.updateAnnotation);
@@ -89,6 +90,12 @@ function ImageEditor() {
 
   const selected = annotations.find((a) => a.id === selectedId) ?? null;
   const selectedText = selected?.type === 'text' ? selected : null;
+
+  // 离开页面时清空编辑器状态：store 是模块级单例，不会随组件卸载而重置，
+  // 若不清空，下次进入会保留上次的图片/标注/历史，看起来像页面没有卸载
+  useEffect(() => {
+    return () => reset();
+  }, [reset]);
 
   // 快捷键：Ctrl/Cmd+Z 撤销，Ctrl/Cmd+Shift+Z 重做
   useEffect(() => {
