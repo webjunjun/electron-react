@@ -145,6 +145,11 @@ function Ocr() {
     event.stopPropagation();
     setImage(null);
     setBoxes([]);
+    setRecScores([]);
+    setText('');
+    setCharCount(0);
+    setAvgConfidence(null);
+    setScanElapsed(null);
   };
 
   // 开始识别
