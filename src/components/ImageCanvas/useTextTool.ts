@@ -164,6 +164,7 @@ const useTextTool = ({
     if (!selectionBoxRef.current) {
       const box = new Graphics();
       box.visible = false;
+      box.label = 'selection-box'; // 导出时据此隐藏选中框
       selectionBoxRef.current = box;
     }
     const box = selectionBoxRef.current;

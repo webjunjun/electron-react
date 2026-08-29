@@ -106,12 +106,13 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
     const frame = useImageEditorStore.getState().frame;
     if (!frame || frame.width <= 0 || frame.height <= 0) return null;
 
-    // 临时隐藏裁剪画框叠加层（遮罩/边框/手柄不应出现在成品里）
-    const cropGroup = annotationLayerRef.current?.children.find(
-      (c) => c.label === 'crop-frame'
+    // 临时隐藏 UI 叠加层（裁剪画框的遮罩/边框/手柄、文字选中框不应出现在成品里）
+    const overlayLabels = ['crop-frame', 'selection-box'];
+    const overlays = (annotationLayerRef.current?.children ?? []).filter(
+      (c) => c.label && overlayLabels.includes(c.label)
     );
-    const prevVisible = cropGroup?.visible ?? false;
-    if (cropGroup) cropGroup.visible = false;
+    const prevVisible = overlays.map((c) => c.visible);
+    overlays.forEach((c) => (c.visible = false));
 
     // 以 1:1 像素导出：输出尺寸 = frame 的 world 尺寸
     const outW = Math.max(1, Math.round(frame.width));
@@ -134,7 +135,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(({
       dataUrl = canvas.toDataURL ? canvas.toDataURL('image/png') : null;
     } finally {
       rt.destroy(true);
-      if (cropGroup) cropGroup.visible = prevVisible;
+      overlays.forEach((c, i) => (c.visible = prevVisible[i]));
     }
     return dataUrl;
   };

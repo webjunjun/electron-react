@@ -17,7 +17,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
     id: 'grayscale',
     name: '黑白',
     preview: 'grayscale(1)',
-    apply: (f) => f.grayscale(0.4, true),
+    apply: (f) => f.grayscale(1, true),
   },
   {
     id: 'sepia',

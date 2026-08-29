@@ -86,7 +86,7 @@ function CropToolPanel() {
           <Select
             style={{ width: '100%' }}
             disabled={disabled}
-            defaultValue={currentValue}
+            value={currentValue}
             onChange={handleRatioChange}
           >
             {RATIO_OPTIONS.map((item) => (
