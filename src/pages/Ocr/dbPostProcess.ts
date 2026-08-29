@@ -317,3 +317,36 @@ export function dbPostProcess(
   }
   return boxes
 }
+
+/**
+ * 按阅读顺序排序检测框：按中心 y 分行（行高 60% 为容差），行内按中心 x 从左到右。
+ * dbPostProcess 的输出顺序是连通域行扫描序，同一行片段、跨行框可能交错，
+ * 排序后文本行拼接顺序与视觉阅读顺序一致。
+ */
+export function sortBoxesReadingOrder(boxes: DetBox[]): DetBox[] {
+  const items = boxes.map((box) => {
+    const xs = box.points.map((p) => p[0])
+    const ys = box.points.map((p) => p[1])
+    return {
+      box,
+      cx: (Math.min(...xs) + Math.max(...xs)) / 2,
+      cy: (Math.min(...ys) + Math.max(...ys)) / 2,
+      h: Math.max(...ys) - Math.min(...ys),
+    }
+  })
+  items.sort((a, b) => a.cy - b.cy)
+  const lines: typeof items[] = []
+  for (const it of items) {
+    const line = lines[lines.length - 1]
+    if (line) {
+      const lineCy = line.reduce((s, x) => s + x.cy, 0) / line.length
+      const lineH = Math.max(...line.map((x) => x.h), it.h)
+      if (Math.abs(it.cy - lineCy) < lineH * 0.6) {
+        line.push(it)
+        continue
+      }
+    }
+    lines.push([it])
+  }
+  return lines.flatMap((line) => line.sort((a, b) => a.cx - b.cx)).map((x) => x.box)
+}

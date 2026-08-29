@@ -11,7 +11,7 @@ import * as ort from 'onnxruntime-web';
 const SCALE = 1 / 255;
 
 export interface RecCrop {
-  /** 裁剪并 RecResizeImg 后的 RGB 像素，HWC 排列（来自主进程 cropTextRegion，固定 48×320） */
+  /** 裁剪并 RecResizeImg 后的 RGB 像素，HWC 排列（来自主进程 cropTextRegions，固定 48×320） */
   data: Uint8Array;
   /** 固定宽度 320 */
   width: number;

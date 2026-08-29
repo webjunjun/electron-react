@@ -37,19 +37,26 @@ export interface ElectronAPI {
       }
     | { success: false; error?: string }
   >;
-  // 透视裁剪文字条：根据检测框 4 角点从原图透视裁剪并矫正为水平矩形，返回 RGB HWC 像素
-  cropTextRegion: (options: {
+  // 批量透视裁剪文字条：一次读图，根据检测框 4 角点数组透视裁剪并矫正为水平矩形，返回 RGB HWC 像素
+  cropTextRegions: (options: {
     path: string;
-    /** 检测框 4 个角点，原图坐标 */
-    quad: [number, number][];
+    /** 检测框 4 角点数组，原图坐标 */
+    quads: [number, number][][];
   }) => Promise<
     | {
         success: true;
-        /** 裁剪后 RGB 像素数据，HWC 排列 */
-        data: Uint8Array;
-        width: number;
-        height: number;
-        channels: number;
+        /** 与 quads 一一对应，单个 quad 失败不影响其他项 */
+        crops: (
+          | {
+              success: true;
+              /** 裁剪后 RGB 像素数据，HWC 排列，固定 48×320 */
+              data: Uint8Array;
+              width: number;
+              height: number;
+              channels: number;
+            }
+          | { success: false; error?: string }
+        )[];
       }
     | { success: false; error?: string }
   >;
