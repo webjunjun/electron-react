@@ -14,7 +14,7 @@ import {
   useImageEditorStore,
   MosaicRegion,
 } from '../../store/imageEditorStore';
-import { clampPoint, clampRect } from '../../store/imageEditor/utils';
+import { clampPoint, clampRect, isInBounds } from '../../store/imageEditor/utils';
 import { screenToWorld } from './coords';
 
 /** 新建马赛克区域时的默认参数。 */
@@ -194,12 +194,12 @@ const useMosaicTool = ({
       if (!imageSize) return;
       const layer = annotationLayerRef.current;
       if (!layer) return;
-      // 起点限制在图片边界内
+      // 起点必须在图片边界内，否则不创建马赛克
       const raw = screenToWorld(world, e.global.x, e.global.y);
-      const p = clampPoint(raw.x, raw.y, imageSize);
+      if (!isInBounds(raw.x, raw.y, imageSize)) return;
       const g = new Graphics();
       layer.addChild(g);
-      dragRef.current = { startX: p.x, startY: p.y, graphics: g };
+      dragRef.current = { startX: raw.x, startY: raw.y, graphics: g };
     };
 
     const handleMove = (e: FederatedPointerEvent) => {

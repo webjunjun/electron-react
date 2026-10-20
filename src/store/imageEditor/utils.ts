@@ -23,6 +23,12 @@ export const clampPoint = (x: number, y: number, size: ImageSize) => {
   };
 };
 
+/** 判断 world 坐标点是否严格在图片边界内（含边界）。 */
+export const isInBounds = (x: number, y: number, size: ImageSize) => {
+  const b = imageBounds(size);
+  return x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+};
+
 /**
  * 把一个矩形夹到图片边界内（矩形不能超出图片范围）。
  * 坐标语义同 Frame：x/y 为左上角，width/height 为正数。

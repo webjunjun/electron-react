@@ -8,7 +8,7 @@ import {
   Text,
 } from 'pixi.js';
 import { useImageEditorStore, TextAnnotation } from '../../store/imageEditorStore';
-import { clampPoint } from '../../store/imageEditor/utils';
+import { clampPoint, isInBounds } from '../../store/imageEditor/utils';
 import { screenToWorld } from './coords';
 
 export interface DefaultTextStyle {
@@ -96,16 +96,16 @@ const useTextTool = ({
       const imageSize = useImageEditorStore.getState().imageSize;
       if (!imageSize) return;
 
-      // 文字锚点限制在图片边界内
+      // 点在图片外 → 不创建标注
       const raw = screenToWorld(world, e.global.x, e.global.y);
-      const { x, y } = clampPoint(raw.x, raw.y, imageSize);
+      if (!isInBounds(raw.x, raw.y, imageSize)) return;
 
       pushHistory(); // 新增文字前记录历史
       addAnnotation({
         id: crypto.randomUUID(),
         type: 'text',
-        x,
-        y,
+        x: raw.x,
+        y: raw.y,
         content: NEW_TEXT_CONTENT,
         fontSize: defaultStyle.fontSize,
         color: defaultStyle.color,
