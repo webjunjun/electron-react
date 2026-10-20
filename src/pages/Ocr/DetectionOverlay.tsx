@@ -11,6 +11,8 @@ interface DetectionOverlayProps {
   imgRef: React.RefObject<HTMLImageElement>;
   /** rec 识别置信度（0~1），与 boxes 一一对应；null/undefined 表示未识别 */
   scores?: (number | null)[];
+  /** 需要高亮的检测框下标（与识别结果行号对应），null 表示无高亮 */
+  activeIndex?: number | null;
 }
 
 /**
@@ -18,7 +20,7 @@ interface DetectionOverlayProps {
  * 根据 img 在容器内的实际显示位置与缩放比，把原图坐标的检测框映射后绘制。
  * 不依赖 Pixi，pointerEvents:none 不拦截拖拽导入等交互。
  */
-export default function DetectionOverlay({ boxes, imgRef, scores }: DetectionOverlayProps) {
+export default function DetectionOverlay({ boxes, imgRef, scores, activeIndex = null }: DetectionOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -55,8 +57,14 @@ export default function DetectionOverlay({ boxes, imgRef, scores }: DetectionOve
       boxes.forEach((box, idx) => {
         const score = scores?.[idx];
         const low = typeof score === 'number' && score < LOW_CONFIDENCE;
-        const stroke = low ? '#faad14' : '#00e676';
-        const fill = low ? 'rgba(250, 173, 20, 0.14)' : 'rgba(0, 230, 118, 0.14)';
+        const isActive = idx === activeIndex;
+        // 高亮 > 置信度着色 > 默认绿色
+        const stroke = isActive ? '#ff9800' : low ? '#faad14' : '#00e676';
+        const fill = isActive
+          ? 'rgba(255, 152, 0, 0.30)'
+          : low
+            ? 'rgba(250, 173, 20, 0.14)'
+            : 'rgba(0, 230, 118, 0.14)';
         ctx.beginPath();
         box.points.forEach(([x, y], i) => {
           const px = offsetX + x * scaleX;
@@ -65,6 +73,7 @@ export default function DetectionOverlay({ boxes, imgRef, scores }: DetectionOve
           else ctx.lineTo(px, py);
         });
         ctx.closePath();
+        ctx.lineWidth = isActive ? 3 : 2;
         ctx.fillStyle = fill;
         ctx.fill();
         ctx.strokeStyle = stroke;
@@ -96,7 +105,7 @@ export default function DetectionOverlay({ boxes, imgRef, scores }: DetectionOve
       ro.disconnect();
       window.removeEventListener('resize', draw);
     };
-  }, [boxes, imgRef, scores]);
+  }, [boxes, imgRef, scores, activeIndex]);
 
   return (
     <canvas

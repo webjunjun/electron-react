@@ -11,6 +11,7 @@ import {
   BrushAnnotation,
   BrushPoint,
 } from '../../store/imageEditorStore';
+import { clampPoint } from '../../store/imageEditor/utils';
 import { screenToWorld } from './coords';
 
 export interface DefaultBrushStyle {
@@ -93,9 +94,13 @@ const useBrushTool = ({
 
     const handleDown = (e: FederatedPointerEvent) => {
       if (!isBrushTool || !spriteRef.current) return;
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
       const layer = annotationLayerRef.current;
       if (!layer) return;
-      const anchor = screenToWorld(world, e.global.x, e.global.y);
+      // 起点限制在图片边界内
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const anchor = clampPoint(raw.x, raw.y, imageSize);
       const g = new Graphics();
       g.position.set(anchor.x, anchor.y);
       layer.addChild(g);
@@ -105,7 +110,11 @@ const useBrushTool = ({
     const handleMove = (e: FederatedPointerEvent) => {
       const drawing = drawingRef.current;
       if (!drawing) return;
-      const p = screenToWorld(world, e.global.x, e.global.y);
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
+      // 每个轨迹点限制在图片边界内
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const p = clampPoint(raw.x, raw.y, imageSize);
       drawing.points.push({
         x: p.x - drawing.anchor.x,
         y: p.y - drawing.anchor.y,

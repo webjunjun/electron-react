@@ -8,6 +8,7 @@ import {
   Text,
 } from 'pixi.js';
 import { useImageEditorStore, TextAnnotation } from '../../store/imageEditorStore';
+import { clampPoint } from '../../store/imageEditor/utils';
 import { screenToWorld } from './coords';
 
 export interface DefaultTextStyle {
@@ -65,6 +66,10 @@ const useTextTool = ({
     offsetY: number;
     moved: boolean;
   } | null>(null);
+  // 刚完成了一次拖拽：阻止紧接而来的 pointertap 误触发 handleTap 新建文字
+  // （clamp 把文字位置固定后，鼠标可能已偏离文字 bounds，pointerup 解析到 stage，
+  //  pointertap 随即在 stage 上触发，导致重复创建）
+  const justDraggedRef = useRef(false);
 
   // 当前选中的工具是否是 text 工具
   const isTextTool = activeTool === 'text';
@@ -81,10 +86,19 @@ const useTextTool = ({
 
     // 点击空白处新增文字（仅 text 工具、且点到的是舞台本身）
     const handleTap = (e: FederatedPointerEvent) => {
+      // 刚拖完一个文字，pointertap 可能因 clamp 偏移误触发 → 跳过
+      if (justDraggedRef.current) {
+        justDraggedRef.current = false;
+        return;
+      }
       if (!isTextTool || !spriteRef.current) return;
       if (e.target !== stage) return; // 点到已有文字时交给文字自身处理
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
 
-      const { x, y } = screenToWorld(world, e.global.x, e.global.y);
+      // 文字锚点限制在图片边界内
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const { x, y } = clampPoint(raw.x, raw.y, imageSize);
 
       pushHistory(); // 新增文字前记录历史
       addAnnotation({
@@ -104,8 +118,21 @@ const useTextTool = ({
       if (!drag) return;
       const text = textMapRef.current.get(drag.id);
       if (!text) return;
-      const { x, y } = screenToWorld(world, e.global.x, e.global.y);
-      text.position.set(x - drag.offsetX, y - drag.offsetY);
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      let nx = raw.x - drag.offsetX;
+      let ny = raw.y - drag.offsetY;
+      // 把文字框整体限制在图片内（anchor 默认 0,0 即左上角）
+      const b = {
+        left: -imageSize.width / 2,
+        top: -imageSize.height / 2,
+        right: imageSize.width / 2,
+        bottom: imageSize.height / 2,
+      };
+      nx = Math.min(Math.max(nx, b.left), Math.max(b.left, b.right - text.width));
+      ny = Math.min(Math.max(ny, b.top), Math.max(b.top, b.bottom - text.height));
+      text.position.set(nx, ny);
       drag.moved = true;
       drawSelectionBox(text);
     };
@@ -119,6 +146,7 @@ const useTextTool = ({
         pushHistory(); // 仅真正发生移动时记录历史
         updateAnnotation(drag.id, { x: text.position.x, y: text.position.y });
       }
+      justDraggedRef.current = drag.moved;
       dragRef.current = null;
     };
 

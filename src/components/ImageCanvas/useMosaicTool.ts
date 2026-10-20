@@ -14,6 +14,7 @@ import {
   useImageEditorStore,
   MosaicRegion,
 } from '../../store/imageEditorStore';
+import { clampPoint, clampRect } from '../../store/imageEditor/utils';
 import { screenToWorld } from './coords';
 
 /** 新建马赛克区域时的默认参数。 */
@@ -189,9 +190,13 @@ const useMosaicTool = ({
 
     const handleDown = (e: FederatedPointerEvent) => {
       if (!isMosaicTool || !spriteRef.current) return;
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
       const layer = annotationLayerRef.current;
       if (!layer) return;
-      const p = screenToWorld(world, e.global.x, e.global.y);
+      // 起点限制在图片边界内
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const p = clampPoint(raw.x, raw.y, imageSize);
       const g = new Graphics();
       layer.addChild(g);
       dragRef.current = { startX: p.x, startY: p.y, graphics: g };
@@ -200,7 +205,11 @@ const useMosaicTool = ({
     const handleMove = (e: FederatedPointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      const p = screenToWorld(world, e.global.x, e.global.y);
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
+      // 当前鼠标位置限制在图片边界内
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const p = clampPoint(raw.x, raw.y, imageSize);
       const r = rectOf(drag.startX, drag.startY, p.x, p.y);
       drag.graphics.clear();
       drag.graphics
@@ -212,20 +221,28 @@ const useMosaicTool = ({
     const handleUp = (e: FederatedPointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) { dragRef.current = null; return; }
       dragRef.current = null;
       drag.graphics.parent?.removeChild(drag.graphics);
       drag.graphics.destroy();
-      const p = screenToWorld(world, e.global.x, e.global.y);
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const p = clampPoint(raw.x, raw.y, imageSize);
       const r = rectOf(drag.startX, drag.startY, p.x, p.y);
       // 过小的框视为误操作
       if (r.w < 3 || r.h < 3) return;
+      // 最终矩形 clamp 到图片内
+      const clamped = clampRect(
+        { x: r.x, y: r.y, width: r.w, height: r.h },
+        imageSize
+      );
       pushHistory(); // 新增马赛克前记录历史
       addMosaic({
         id: crypto.randomUUID(),
-        x: r.x,
-        y: r.y,
-        width: r.w,
-        height: r.h,
+        x: clamped.x,
+        y: clamped.y,
+        width: clamped.width,
+        height: clamped.height,
         mode: defaultStyle.mode,
         strength: defaultStyle.strength,
       });

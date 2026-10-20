@@ -4,21 +4,50 @@ import { EditorSnapshot, Frame, ImageSize } from './types';
 const MIN_FRAME_SIZE = 20;
 
 /**
+ * 返回图片在 world 坐标系下的四个边界。
+ * 图片 anchor 0.5（居中），所以边界为 [-w/2, -h/2, w/2, h/2]。
+ */
+export const imageBounds = (size: ImageSize) => ({
+  left: -size.width / 2,
+  top: -size.height / 2,
+  right: size.width / 2,
+  bottom: size.height / 2,
+});
+
+/** 把一个 world 坐标点夹到图片边界内。 */
+export const clampPoint = (x: number, y: number, size: ImageSize) => {
+  const b = imageBounds(size);
+  return {
+    x: Math.min(Math.max(x, b.left), b.right),
+    y: Math.min(Math.max(y, b.top), b.bottom),
+  };
+};
+
+/**
+ * 把一个矩形夹到图片边界内（矩形不能超出图片范围）。
+ * 坐标语义同 Frame：x/y 为左上角，width/height 为正数。
+ */
+export const clampRect = (
+  rect: { x: number; y: number; width: number; height: number },
+  size: ImageSize
+) => {
+  const b = imageBounds(size);
+  // 尺寸先夹到图片能容纳的最大范围
+  const width = Math.min(rect.width, size.width);
+  const height = Math.min(rect.height, size.height);
+  const x = Math.min(Math.max(rect.x, b.left), b.right - width);
+  const y = Math.min(Math.max(rect.y, b.top), b.bottom - height);
+  return { x, y, width, height };
+};
+
+/**
  * 把画框约束在图片边界内（图片 anchor 0.5，边界为 [-w/2, -h/2, w, h]），
  * 并保证宽高不小于 MIN_FRAME_SIZE。
  */
 export const clampFrame = (frame: Frame, size: ImageSize): Frame => {
-  const left = -size.width / 2;
-  const top = -size.height / 2;
-  const right = size.width / 2;
-  const bottom = size.height / 2;
-  // 尺寸先夹到 [MIN, 图片尺寸]
   const width = Math.min(Math.max(frame.width, MIN_FRAME_SIZE), size.width);
   const height = Math.min(Math.max(frame.height, MIN_FRAME_SIZE), size.height);
-  // 位置夹到边界内
-  const x = Math.min(Math.max(frame.x, left), right - width);
-  const y = Math.min(Math.max(frame.y, top), bottom - height);
-  return { x, y, width, height };
+  return clampRect({ ...frame, width, height }, size) as Frame;
 };
 
 /** 由图片尺寸生成默认全图画框。 */

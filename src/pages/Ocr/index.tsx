@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, message, Space } from 'antd';
+import { Button, message, Space, Spin } from 'antd';
 import * as ort from 'onnxruntime-web';
 // 用 ?url 交给 Vite 打包并提供可访问路径
 import detModelUrl from '../../assets/ocr_lib/PP-OCRv6_tiny_det.onnx?url';
@@ -17,6 +17,7 @@ import {
   DeleteOutlined,
   InboxOutlined,
   PictureOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { buildDetInputTensor } from './detImage';
 import { dbPostProcess, sortBoxesReadingOrder, type DetBox } from './dbPostProcess';
@@ -39,7 +40,6 @@ function Ocr() {
   const imgRef = useRef<HTMLImageElement>(null);
   const [boxes, setBoxes] = useState<DetBox[]>([]);
   const [text, setText] = useState('');
-  const [charCount, setCharCount] = useState(0);
   const [scanning, setScanning] = useState(false);
   /** rec 识别置信度（0~1），与 boxes 一一对应 */
   const [recScores, setRecScores] = useState<(number | null)[]>([]);
@@ -47,6 +47,12 @@ function Ocr() {
   const [avgConfidence, setAvgConfidence] = useState<number | null>(null);
   /** 模型加载失败后的重试计数，变更触发重新加载 */
   const [retryCount, setRetryCount] = useState(0);
+  // 识别结果每条文字行对应一个检测框；编辑后行数可能变化，联动以较少者为准
+  const [boxLineCount, setBoxLineCount] = useState(0);
+  const [activeLine, setActiveLine] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // 字符数由 text 派生，排除换行符
+  const charCount = text.replace(/\n/g, '').length;
 
   useEffect(() => {
     let disposed = false;
@@ -99,9 +105,10 @@ function Ocr() {
     setBoxes([]);
     setRecScores([]);
     setText('');
-    setCharCount(0);
     setAvgConfidence(null);
     setScanElapsed(null);
+    setBoxLineCount(0);
+    setActiveLine(null);
     setImage({
       src: `${LOCAL_FILE_PROTOCOL}/${encodeURI(path.replace(/\\/g, '/'))}`,
       name,
@@ -147,9 +154,10 @@ function Ocr() {
     setBoxes([]);
     setRecScores([]);
     setText('');
-    setCharCount(0);
     setAvgConfidence(null);
     setScanElapsed(null);
+    setBoxLineCount(0);
+    setActiveLine(null);
   };
 
   // 开始识别
@@ -167,9 +175,10 @@ function Ocr() {
     setBoxes([]);
     setRecScores([]);
     setText('');
-    setCharCount(0);
     setAvgConfidence(null);
     setScanElapsed(null);
+    setBoxLineCount(0);
+    setActiveLine(null);
     setScanning(true);
     const startTime = performance.now();
     try {
@@ -298,11 +307,12 @@ function Ocr() {
       setBoxes(finalBoxes);
       setRecScores(finalScores);
       setText(allText);
-      setCharCount(allText.replace(/\n/g, '').length);
+      // charCount 派生自 text，无需手动 set
       const scored = finalScores.filter((s): s is number => typeof s === 'number');
       setAvgConfidence(
         scored.length ? scored.reduce((sum, s) => sum + s, 0) / scored.length : null
       );
+      setBoxLineCount(finalBoxes.length);
     } catch (error) {
       console.error('[det | rec] 识别失败:', error);
       message.error('识别失败');
@@ -310,6 +320,12 @@ function Ocr() {
       setScanning(false);
       setScanElapsed(Math.round(performance.now() - startTime));
     }
+  };
+
+  // 根据 textarea 光标位置计算所在行号（0 基）
+  const syncActiveLine = (el: HTMLTextAreaElement) => {
+    const pos = el.selectionStart ?? 0;
+    setActiveLine(el.value.slice(0, pos).split('\n').length - 1);
   };
 
   // 复制
@@ -361,7 +377,7 @@ function Ocr() {
             loading={scanning || modelStatus === 'loading'}
             onClick={handleScan}
           >
-            开始识别
+            {scanning ? '识别中…' : '开始识别'}
           </Button>
           <Button
             icon={<CopyOutlined />}
@@ -407,7 +423,12 @@ function Ocr() {
                 // 禁用图片拖拽 避免冒泡到父容器绑定的拖拽事件
                 draggable={false}
               />
-              <DetectionOverlay boxes={boxes} imgRef={imgRef} scores={recScores} />
+              <DetectionOverlay
+                boxes={boxes}
+                imgRef={imgRef}
+                scores={recScores}
+                activeIndex={activeLine !== null && activeLine < boxLineCount ? activeLine : null}
+              />
               <div className="ocr-preview__actions">
                 <Button
                   danger
@@ -436,14 +457,26 @@ function Ocr() {
         <div className="ocr-result">
           <div className="ocr-result__title">识别结果</div>
           <textarea
+            ref={textareaRef}
             className="ocr-result__text"
-            placeholder="识别结果将显示在这里，可手动修正…"
             value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setCharCount(e.target.value.replace(/\n/g, '').length);
-            }}
+            onChange={(e) => setText(e.target.value)}
+            onSelect={(e) => syncActiveLine(e.currentTarget)}
+            onFocus={(e) => syncActiveLine(e.currentTarget)}
+            onBlur={() => setActiveLine(null)}
           />
+          {!text && !scanning && (
+            <div className="ocr-result__empty">
+              <FileTextOutlined />
+              <span>暂无识别结果，识别后可在此手动修正</span>
+            </div>
+          )}
+          {scanning && (
+            <div className="ocr-result__loading">
+              <Spin size="small" />
+              <span>识别中…</span>
+            </div>
+          )}
         </div>
       </div>
 

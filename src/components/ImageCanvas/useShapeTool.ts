@@ -11,6 +11,7 @@ import {
   ShapeAnnotation,
   ShapeType,
 } from '../../store/imageEditorStore';
+import { clampPoint } from '../../store/imageEditor/utils';
 import { screenToWorld } from './coords';
 
 export interface DefaultShapeStyle {
@@ -143,9 +144,13 @@ const useShapeTool = ({
 
     const handleDown = (e: FederatedPointerEvent) => {
       if (!isShapeTool || !spriteRef.current) return;
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
       const layer = annotationLayerRef.current;
       if (!layer) return;
-      const anchor = screenToWorld(world, e.global.x, e.global.y);
+      // 起点限制在图片边界内
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const anchor = clampPoint(raw.x, raw.y, imageSize);
       const g = new Graphics();
       g.position.set(anchor.x, anchor.y);
       layer.addChild(g);
@@ -155,7 +160,11 @@ const useShapeTool = ({
     const handleMove = (e: FederatedPointerEvent) => {
       const drawing = drawingRef.current;
       if (!drawing) return;
-      const p = screenToWorld(world, e.global.x, e.global.y);
+      const imageSize = useImageEditorStore.getState().imageSize;
+      if (!imageSize) return;
+      // 拖动终点限制在图片边界内
+      const raw = screenToWorld(world, e.global.x, e.global.y);
+      const p = clampPoint(raw.x, raw.y, imageSize);
       let dx = p.x - drawing.anchor.x;
       let dy = p.y - drawing.anchor.y;
       // Shift 锁等比（仅矩形/椭圆）：以较大绝对值为基准，正负号保留方向

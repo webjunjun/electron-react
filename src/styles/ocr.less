@@ -119,6 +119,7 @@
 
 // 右：识别结果
 .ocr-result {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -149,6 +150,34 @@
 
   &::placeholder {
     color: @text-secondary;
+  }
+}
+
+.ocr-result__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: @text-secondary;
+  background: fade(@bg-panel, 70%);
+}
+
+.ocr-result__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: @text-secondary;
+  // 不拦截点击，textarea 仍可聚焦输入
+  pointer-events: none;
+
+  .anticon {
+    font-size: 40px;
   }
 }
 
