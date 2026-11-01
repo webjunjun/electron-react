@@ -12,7 +12,7 @@ export interface RecResult {
 let cachedDict: string[] | null = null;
 export function getRecCharDict(): string[] {
   if (cachedDict) return cachedDict;
-  cachedDict = dictRaw.split('\n');
+  cachedDict = dictRaw.split(/\r?\n/).filter((s) => s.length > 0);
   return cachedDict;
 }
 
